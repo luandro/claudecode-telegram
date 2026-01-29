@@ -17,6 +17,14 @@ HISTORY_FILE = os.path.expanduser("~/.claude/history.jsonl")
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 PORT = int(os.environ.get("PORT", "8080"))
 
+# Configure reaction emoji with validation
+_REACTION_EMOJI_RAW = os.environ.get("TELEGRAM_REACTION_EMOJI", "\U0001f44d")  # Default: 👍 (thumbs up)
+# Strip whitespace first, then allow explicit disable with "none", "false", "0", or empty string
+_REACTION_EMOJI_STRIPPED = _REACTION_EMOJI_RAW.strip()
+_REACTION_EMOJI_CANDIDATE = None if not _REACTION_EMOJI_STRIPPED or _REACTION_EMOJI_STRIPPED.lower() in ("none", "false", "0") else _REACTION_EMOJI_STRIPPED
+# Basic validation: emoji should be reasonable length (1-10 chars) to prevent abuse
+REACTION_EMOJI = _REACTION_EMOJI_CANDIDATE if _REACTION_EMOJI_CANDIDATE and len(_REACTION_EMOJI_CANDIDATE) <= 10 else None
+
 BOT_COMMANDS = [
     {"command": "clear", "description": "Clear conversation"},
     {"command": "resume", "description": "Resume session (shows picker)"},
@@ -33,6 +41,20 @@ BLOCKED_COMMANDS = [
 ]
 
 
+def _redact_sensitive_data(data):
+    """Deep redact sensitive fields from API data."""
+    # Fields that should never appear in logs
+    SENSITIVE_KEYS = {"text", "caption", "chat_id", "message_id", "callback_data", "url"}
+
+    def _redact(obj):
+        if isinstance(obj, dict):
+            return {k: _redact(v) for k, v in obj.items() if k not in SENSITIVE_KEYS}
+        elif isinstance(obj, list):
+            return [_redact(item) for item in obj]
+        return obj
+
+    return _redact(data) if isinstance(data, dict) else data
+
 def telegram_api(method, data):
     if not BOT_TOKEN:
         return None
@@ -45,7 +67,11 @@ def telegram_api(method, data):
         with urllib.request.urlopen(req, timeout=10) as r:
             return json.loads(r.read())
     except Exception as e:
-        print(f"Telegram API error: {e}")
+        # Sanitize exception message to hide bot token
+        error_msg = str(e).replace(BOT_TOKEN, "<BOT_TOKEN>") if BOT_TOKEN in str(e) else str(e)
+        # Deep redact sensitive fields from data
+        safe_data = _redact_sensitive_data(data)
+        print(f"Telegram API error ({method}): {error_msg} | data={safe_data}")
         return None
 
 
@@ -246,12 +272,19 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
         # Regular message
-        print(f"[{chat_id}] {text[:50]}...")
+        print(f"[MSG_RECEIVED] length={len(text)}")
         with open(PENDING_FILE, "w") as f:
             f.write(str(int(time.time())))
 
-        if msg_id:
-            telegram_api("setMessageReaction", {"chat_id": chat_id, "message_id": msg_id, "reaction": [{"type": "emoji", "emoji": "\u2705"}]})
+        if msg_id and REACTION_EMOJI:
+            telegram_api(
+                "setMessageReaction",
+                {
+                    "chat_id": chat_id,
+                    "message_id": msg_id,
+                    "reaction": [{"type": "emoji", "emoji": REACTION_EMOJI}],
+                },
+            )
 
         if not tmux_exists():
             self.reply(chat_id, "tmux not found")
