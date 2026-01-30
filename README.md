@@ -117,7 +117,30 @@ export TELEGRAM_WEBHOOK_SECRET="<generated_token>"
 
 ### 7. Set webhook
 
-Tells Telegram where to send message updates. Include the webhook path shown when starting the bridge. If you set a secret token, include it in the webhook URL.
+Tells Telegram where to send message updates. Use the built-in CLI command (recommended):
+
+```bash
+# Set webhook with default domain (from WEBHOOK_DOMAIN env var, or coder.luandro.com)
+claudecode-telegram set-webhook
+
+# Set webhook with custom domain
+claudecode-telegram set-webhook --domain your-domain.com
+
+# Verify webhook is set correctly
+claudecode-telegram get-webhook-info
+
+# Delete webhook when needed
+claudecode-telegram delete-webhook
+```
+
+The `set-webhook` command automatically:
+
+- Uses the current `WEBHOOK_PATH` from your environment
+- Includes `TELEGRAM_WEBHOOK_SECRET` if configured
+- Validates the Telegram API response
+- Reports success or failure with clear messages
+
+**Manual webhook setup (alternative):**
 
 ```bash
 # Replace <WEBHOOK_PATH> with the path shown in bridge output (e.g., /abc123...)
@@ -138,15 +161,16 @@ curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://Y
 
 ## Environment Variables
 
-| Variable                   | Default        | Description                                                                      |
-| -------------------------- | -------------- | -------------------------------------------------------------------------------- |
-| `TELEGRAM_BOT_TOKEN`       | required       | Bot token from BotFather                                                         |
-| `TELEGRAM_WEBHOOK_SECRET`  | empty          | Secret token to validate webhook requests from Telegram (strongly recommended)   |
-| `TMUX_SESSION`             | `claude`       | tmux session name                                                                |
-| `PORT`                     | `8080`         | Bridge port                                                                      |
-| `HOST`                     | `127.0.0.1`    | Bridge host (defaults to localhost-only for security)                            |
-| `WEBHOOK_PATH`             | auto-generated | Random webhook path (64-char hex string) for security                            |
-| `TELEGRAM_REACTION_EMOJI`  | ``             | Emoji to react to messages (set to "none", "false", "0", or empty to disable)    |
+| Variable                  | Default             | Description                                                                    |
+| ------------------------- | ------------------- | ------------------------------------------------------------------------------ |
+| `TELEGRAM_BOT_TOKEN`      | required            | Bot token from BotFather                                                       |
+| `TELEGRAM_WEBHOOK_SECRET` | empty               | Secret token to validate webhook requests from Telegram (strongly recommended) |
+| `WEBHOOK_DOMAIN`          | `coder.luandro.com` | Default domain for set-webhook command                                         |
+| `TMUX_SESSION`            | `claude`            | tmux session name                                                              |
+| `PORT`                    | `8080`              | Bridge port                                                                    |
+| `HOST`                    | `127.0.0.1`         | Bridge host (defaults to localhost-only for security)                          |
+| `WEBHOOK_PATH`            | auto-generated      | Random webhook path (64-char hex string) for security                          |
+| `TELEGRAM_REACTION_EMOJI` | ``                  | Emoji to react to messages (set to "none", "false", "0", or empty to disable)  |
 
 ### Quick Setup with .env
 

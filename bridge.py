@@ -89,6 +89,48 @@ def setup_bot_commands():
         print("Bot commands registered")
 
 
+def set_webhook(domain: str) -> bool:
+    """Set the Telegram webhook URL with current configuration."""
+    webhook_url = f"https://{domain}/{WEBHOOK_PATH}"
+    params = {"url": webhook_url}
+
+    if TELEGRAM_WEBHOOK_SECRET:
+        params["secret_token"] = TELEGRAM_WEBHOOK_SECRET
+
+    result = telegram_api("setWebhook", params)
+    if result and result.get("ok"):
+        print(f"Webhook set successfully: {webhook_url}")
+        if TELEGRAM_WEBHOOK_SECRET:
+            print("Secret token: configured")
+        else:
+            print("Secret token: not configured (recommended)")
+        return True
+    else:
+        error_desc = result.get("description", "Unknown error") if result else "No response"
+        print(f"Failed to set webhook: {error_desc}")
+        return False
+
+
+def get_webhook_info() -> dict:
+    """Get current webhook information from Telegram."""
+    result = telegram_api("getWebhookInfo", {})
+    if result and result.get("ok"):
+        return result.get("result", {})
+    print("Failed to get webhook info")
+    return {}
+
+
+def delete_webhook() -> bool:
+    """Delete the current webhook."""
+    result = telegram_api("deleteWebhook", {"drop_pending_updates": True})
+    if result and result.get("ok"):
+        print("Webhook deleted successfully")
+        return True
+    error_desc = result.get("description", "Unknown error") if result else "No response"
+    print(f"Failed to delete webhook: {error_desc}")
+    return False
+
+
 def send_typing_loop(chat_id):
     while os.path.exists(PENDING_FILE):
         telegram_api("sendChatAction", {"chat_id": chat_id, "action": "typing"})
@@ -350,15 +392,53 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    import argparse
+
+    # Default webhook domain from environment or fallback
+    default_domain = os.environ.get("WEBHOOK_DOMAIN", "coder.luandro.com")
+
+    parser = argparse.ArgumentParser(description="Claude Code <-> Telegram Bridge")
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # Set webhook command
+    webhook_parser = subparsers.add_parser("set-webhook", help="Set Telegram webhook")
+    webhook_parser.add_argument(
+        "--domain",
+        default=default_domain,
+        help=f"Webhook domain (default: {default_domain})"
+    )
+
+    # Get webhook info command
+    subparsers.add_parser("get-webhook-info", help="Get current webhook info")
+
+    # Delete webhook command
+    subparsers.add_parser("delete-webhook", help="Delete webhook")
+
+    args = parser.parse_args()
+
+    # Validate bot token exists for all commands
     if not BOT_TOKEN:
         print("Error: TELEGRAM_BOT_TOKEN not set")
-        return
-    setup_bot_commands()
-    print(f"Bridge on {HOST}:{PORT}/{WEBHOOK_PATH} | tmux: {TMUX_SESSION}")
-    try:
-        HTTPServer((HOST, PORT), Handler).serve_forever()
-    except KeyboardInterrupt:
-        print("\nStopped")
+        return 1
+
+    # Execute command
+    if args.command == "set-webhook":
+        return 0 if set_webhook(args.domain) else 1
+    elif args.command == "get-webhook-info":
+        info = get_webhook_info()
+        print(json.dumps(info, indent=2))
+        return 0
+    elif args.command == "delete-webhook":
+        return 0 if delete_webhook() else 1
+    else:
+        # Default: run server (backward compatible)
+        setup_bot_commands()
+        print(f"Bridge on {HOST}:{PORT}/{WEBHOOK_PATH} | tmux: {TMUX_SESSION}")
+        try:
+            HTTPServer((HOST, PORT), Handler).serve_forever()
+        except KeyboardInterrupt:
+            print("\nStopped")
+        return 0
 
 
 if __name__ == "__main__":
