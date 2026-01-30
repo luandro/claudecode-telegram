@@ -1,0 +1,155 @@
+#!/bin/bash
+# Pre-commit hook to prevent accidental token commits
+# This script scans staged files for potential tokens and secrets
+#
+# INSTALLATION:
+#   cp githooks/pre-commit .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+#
+# Or use:
+#   make install-hooks
+
+# Colors for output
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
+# Patterns that should never be committed
+# These are regex patterns that match Telegram bot tokens and webhook secrets
+PATTERNS=(
+    # Telegram bot tokens (format: bot<digits>:<Base64>)
+    # Must be 35+ chars after the colon to avoid false positives
+    "bot[0-9]{8,10}:[A-Za-z0-9_-]{35,}"
+    # Webhook secrets (Base64-like strings with = padding, 40+ chars)
+    # Must end with = to be more specific
+    "[A-Za-z0-9_-]{40,}="
+)
+
+# Files to exclude from scanning (test files, examples, etc.)
+EXCLUDE_PATTERNS=(
+    "\.env\.example"
+    "\.example\."
+    "/tests/"
+    "test_"
+    "_test\.py"
+    "\.md$"
+    "\.sample$"
+)
+
+# Function to check if a file should be excluded
+should_exclude() {
+    local file="$1"
+    for pattern in "${EXCLUDE_PATTERNS[@]}"; do
+        if [[ "$file" =~ $pattern ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Global variable to track issues
+ISSUES_FOUND=0
+
+# Function to check a file for hardcoded token/secret assignments
+check_hardcoded_secrets() {
+    local file="$1"
+
+    # Check for hardcoded TELEGRAM_BOT_TOKEN with actual token values (not placeholders)
+    # Skip: empty strings, "your_*", "YOUR_*", placeholder values
+    if grep -qE "TELEGRAM_BOT_TOKEN[[:space:]]*=[[:space:]]*['\"]" "$file" 2>/dev/null; then
+        # Extract the value and check if it's a real token (not placeholder)
+        while IFS= read -r line; do
+            # Skip lines that are just empty assignments or placeholders
+            if echo "$line" | grep -qE 'TELEGRAM_BOT_TOKEN[[:space:]]*=[[:space:]]*["\](["\]|$)'; then
+                continue  # Empty string
+            fi
+            if echo "$line" | grep -qiE "your_|YOUR_|placeholder|example|test_token|xxx"; then
+                continue  # Placeholder
+            fi
+            # Check if it looks like a real token
+            if echo "$line" | grep -qE "TELEGRAM_BOT_TOKEN[[:space:]]*=[[:space:]]*['\"].{20,}['\"]"; then
+                # Further check: must contain bot token pattern or long secret
+                if echo "$line" | grep -qE "bot[0-9]{8,10}:" || echo "$line" | grep -qE "[A-Za-z0-9_-]{30,}"; then
+                    echo -e "${RED}✗${NC} Potential hardcoded token in ${YELLOW}$file${NC}"
+                    echo -e "  ${RED}→${NC} ${line}"
+                    ISSUES_FOUND=1
+                fi
+            fi
+        done < <(grep -nE "TELEGRAM_BOT_TOKEN[[:space:]]*=[[:space:]]*['\"]" "$file" 2>/dev/null)
+    fi
+
+    # Check for hardcoded TELEGRAM_WEBHOOK_SECRET with actual values
+    if grep -qE "TELEGRAM_WEBHOOK_SECRET[[:space:]]*=[[:space:]]*['\"]" "$file" 2>/dev/null; then
+        while IFS= read -r line; do
+            # Skip lines that are just empty assignments or placeholders
+            if echo "$line" | grep -qE 'TELEGRAM_WEBHOOK_SECRET[[:space:]]*=[[:space:]]*["\](["\]|$)'; then
+                continue  # Empty string
+            fi
+            if echo "$line" | grep -qiE "your_|YOUR_|placeholder|example|test_secret|xxx"; then
+                continue  # Placeholder
+            fi
+            # Check if it's a long secret (20+ chars)
+            if echo "$line" | grep -qE "TELEGRAM_WEBHOOK_SECRET[[:space:]]*=[[:space:]]*['\"].{20,}['\"]"; then
+                echo -e "${RED}✗${NC} Potential hardcoded secret in ${YELLOW}$file${NC}"
+                echo -e "  ${RED}→${NC} ${line}"
+                ISSUES_FOUND=1
+            fi
+        done < <(grep -nE "TELEGRAM_WEBHOOK_SECRET[[:space:]]*=[[:space:]]*['\"]" "$file" 2>/dev/null)
+    fi
+}
+
+# Function to check a file for sensitive patterns
+check_file() {
+    local file="$1"
+
+    # Skip excluded files
+    if should_exclude "$file"; then
+        return 0
+    fi
+
+    # Check each pattern
+    for pattern in "${PATTERNS[@]}"; do
+        if grep -qE "$pattern" "$file" 2>/dev/null; then
+            echo -e "${RED}✗${NC} Potential token found in ${YELLOW}$file${NC}"
+            echo -e "  Pattern matched: ${pattern}"
+            grep -nE "$pattern" "$file" | head -3 | while read -r line; do
+                echo -e "  ${RED}→${NC} ${line}"
+            done
+            ISSUES_FOUND=1
+        fi
+    done
+
+    # Check for hardcoded assignments
+    check_hardcoded_secrets "$file"
+}
+
+# Get list of staged files
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null)
+
+if [ -z "$STAGED_FILES" ]; then
+    # No files staged, exit successfully
+    exit 0
+fi
+
+# Check each staged file
+for file in $STAGED_FILES; do
+    if [ -f "$file" ]; then
+        check_file "$file"
+    fi
+done
+
+if [ $ISSUES_FOUND -eq 1 ]; then
+    echo ""
+    echo -e "${RED}⚠ Commit aborted: Potential tokens or secrets detected!${NC}"
+    echo ""
+    echo "To proceed:"
+    echo "  1. Remove the sensitive data from the files"
+    echo "  2. Use environment variables instead (.env file, already in .gitignore)"
+    echo "  3. If this is a false positive, use 'git commit --no-verify' to bypass"
+    echo ""
+    exit 1
+fi
+
+echo -e "${GREEN}✓ No sensitive tokens detected in staged files${NC}"
+exit 0

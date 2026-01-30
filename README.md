@@ -159,6 +159,27 @@ curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://Y
 | `/loop <prompt>` | Start Ralph Loop (5 iterations)          |
 | `/stop`          | Interrupt Claude                         |
 
+## Token Protection
+
+The project includes a pre-commit hook to prevent accidental token commits. To install:
+
+```bash
+# Install the pre-commit hook
+make install-hooks
+
+# Or manually
+cp githooks/pre-commit .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
+The hook scans staged files for:
+
+- Telegram bot tokens (e.g., `bot123456789:ABC...`)
+- Webhook secrets (Base64-like strings 40+ chars)
+- Hardcoded tokens in code
+
+**Important**: Never commit tokens. Use environment variables via `.env` file (already in `.gitignore`).
+
 ## Environment Variables
 
 | Variable                    | Default             | Description                                                                    |
