@@ -55,10 +55,20 @@ chmod +x ~/.claude/hooks/send-to-telegram.sh
 ```
 
 Add to `~/.claude/settings.json`:
+
 ```json
 {
   "hooks": {
-    "Stop": [{"hooks": [{"type": "command", "command": "~/.claude/hooks/send-to-telegram.sh"}]}]
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/send-to-telegram.sh"
+          }
+        ]
+      }
+    ]
   }
 }
 ```
@@ -99,19 +109,34 @@ curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://Y
 
 ## Bot Commands
 
-| Command | Description |
-|---------|-------------|
-| `/status` | Check tmux session |
-| `/clear` | Clear conversation |
-| `/resume` | Pick session to resume (inline keyboard) |
-| `/continue_` | Auto-continue most recent |
-| `/loop <prompt>` | Start Ralph Loop (5 iterations) |
-| `/stop` | Interrupt Claude |
+| Command          | Description                              |
+| ---------------- | ---------------------------------------- |
+| `/status`        | Check tmux session                       |
+| `/clear`         | Clear conversation                       |
+| `/resume`        | Pick session to resume (inline keyboard) |
+| `/continue_`     | Auto-continue most recent                |
+| `/loop <prompt>` | Start Ralph Loop (5 iterations)          |
+| `/stop`          | Interrupt Claude                         |
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TELEGRAM_BOT_TOKEN` | required | Bot token from BotFather |
-| `TMUX_SESSION` | `claude` | tmux session name |
-| `PORT` | `8080` | Bridge port |
+| Variable                  | Default  | Description                                                                   |
+| ------------------------- | -------- | ----------------------------------------------------------------------------- |
+| `TELEGRAM_BOT_TOKEN`      | required | Bot token from BotFather                                                      |
+| `TMUX_SESSION`            | `claude` | tmux session name                                                             |
+| `PORT`                    | `8080`   | Bridge port                                                                   |
+| `TELEGRAM_REACTION_EMOJI` | ``       | Emoji to react to messages (set to "none", "false", "0", or empty to disable) |
+
+### Quick Setup with .env
+
+```bash
+# Copy the example environment file
+cp .env.example .env
+
+# Edit with your values
+nano .env  # Add your TELEGRAM_BOT_TOKEN
+
+# Source the file before running the bridge
+source .env
+python bridge.py
+```
