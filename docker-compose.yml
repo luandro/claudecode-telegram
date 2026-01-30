@@ -1,0 +1,54 @@
+services:
+  bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: claudecode-telegram-bridge
+    restart: unless-stopped
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TMUX_SESSION=${TMUX_SESSION:-claude}
+      - PORT=${PORT:-8080}
+      - TELEGRAM_REACTION_EMOJI=${TELEGRAM_REACTION_EMOJI:-}
+    volumes:
+      # Mount tmux socket for Claude Code communication
+      - ${TMUX_SOCKET:-/tmp/tmux-1000/default}:/tmux-socket:ro
+      # Mount Claude config directory for chat_id, pending file, and history
+      - ${CLAUDE_DIR:-${HOME}/.claude}:/claude:rw
+    ports:
+      - "${PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - claude-telegram-net
+
+  caddy:
+    image: caddy:latest
+    container_name: claudecode-telegram-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - TELEGRAM_WEBHOOK_PATH=${TELEGRAM_WEBHOOK_PATH:-/webhook}
+    networks:
+      - claude-telegram-net
+    depends_on:
+      - bridge
+
+networks:
+  claude-telegram-net:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

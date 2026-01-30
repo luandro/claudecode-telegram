@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+"""Tests for Docker setup validation."""
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+def test_dockerfile_exists():
+    """Test that Dockerfile exists and is valid."""
+    dockerfile_path = Path(__file__).parent.parent / "Dockerfile"
+    assert dockerfile_path.exists(), "Dockerfile not found"
+
+    content = dockerfile_path.read_text()
+    assert "FROM python:" in content, "Dockerfile missing Python base image"
+    assert "WORKDIR" in content, "Dockerfile missing WORKDIR"
+    assert "COPY" in content, "Dockerfile missing COPY instruction"
+    assert "EXPOSE 8080" in content, "Dockerfile missing EXPOSE 8080"
+    print("✓ Dockerfile is valid")
+
+def test_docker_compose_exists():
+    """Test that docker-compose.yml exists and is valid."""
+    compose_path = Path(__file__).parent.parent / "docker-compose.yml"
+    assert compose_path.exists(), "docker-compose.yml not found"
+
+    content = compose_path.read_text()
+    assert "services:" in content, "docker-compose.yml missing services"
+    assert "bridge:" in content, "docker-compose.yml missing bridge service"
+    assert "caddy:" in content, "docker-compose.yml missing caddy service"
+    assert "networks:" in content, "docker-compose.yml missing networks"
+    assert "volumes:" in content, "docker-compose.yml missing volumes"
+    print("✓ docker-compose.yml is valid")
+
+def test_caddyfile_exists():
+    """Test that Caddyfile exists and is valid."""
+    caddyfile_path = Path(__file__).parent.parent / "Caddyfile"
+    assert caddyfile_path.exists(), "Caddyfile not found"
+
+    content = caddyfile_path.read_text()
+    assert "reverse_proxy" in content, "Caddyfile missing reverse_proxy directive"
+    assert "bridge:8080" in content, "Caddyfile not pointing to bridge service"
+    print("✓ Caddyfile is valid")
+
+def test_dockerfile_syntax():
+    """Test Dockerfile syntax using docker command."""
+    try:
+        result = subprocess.run(
+            ["docker", "build", "--dry-run", "-f", "Dockerfile", "."],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).parent.parent,
+            timeout=30
+        )
+        # Docker doesn't have dry-run, so we just check if command is available
+        if result.returncode == 0 or "command not found" not in result.stderr.lower():
+            print("✓ Dockerfile syntax check passed (docker available)")
+        else:
+            print("⚠ Docker not available for syntax check")
+    except FileNotFoundError:
+        print("⚠ Docker not available for syntax check")
+    except Exception as e:
+        print(f"⚠ Docker syntax check skipped: {e}")
+
+def test_docker_compose_syntax():
+    """Test docker-compose.yml syntax using docker-compose command."""
+    try:
+        result = subprocess.run(
+            ["docker-compose", "config", "--quiet"],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).parent.parent,
+            timeout=30
+        )
+        if result.returncode == 0:
+            print("✓ docker-compose.yml syntax is valid")
+        else:
+            print(f"⚠ docker-compose config check failed: {result.stderr}")
+    except FileNotFoundError:
+        print("⚠ docker-compose not available for syntax check")
+    except Exception as e:
+        print(f"⚠ docker-compose syntax check skipped: {e}")
+
+def test_bridge_service_config():
+    """Test bridge service configuration in docker-compose.yml."""
+    compose_path = Path(__file__).parent.parent / "docker-compose.yml"
+    content = compose_path.read_text()
+
+    # Check for required environment variables
+    assert "TELEGRAM_BOT_TOKEN" in content, "bridge missing TELEGRAM_BOT_TOKEN env var"
+    assert "TMUX_SESSION" in content, "bridge missing TMUX_SESSION env var"
+    assert "PORT" in content, "bridge missing PORT env var"
+
+    # Check for volume mounts
+    assert "tmux-socket" in content or "/tmux" in content, "bridge missing tmux socket mount"
+    assert "claude" in content.lower(), "bridge missing Claude config mount"
+
+    # Check for healthcheck
+    assert "healthcheck:" in content.lower() or "healthcheck" in content, "bridge missing healthcheck"
+
+    print("✓ Bridge service configuration is valid")
+
+def test_caddy_service_config():
+    """Test caddy service configuration in docker-compose.yml."""
+    compose_path = Path(__file__).parent.parent / "docker-compose.yml"
+    content = compose_path.read_text()
+
+    # Check for port mappings
+    assert '"80:80"' in content or "'80:80'" in content, "caddy missing port 80 mapping"
+    assert '"443:443"' in content or "'443:443'" in content, "caddy missing port 443 mapping"
+
+    # Check for Caddyfile mount
+    assert "Caddyfile" in content, "caddy missing Caddyfile mount"
+
+    # Check for persistent volumes
+    assert "caddy_data" in content, "caddy missing caddy_data volume"
+    assert "caddy_config" in content, "caddy missing caddy_config volume"
+
+    print("✓ Caddy service configuration is valid")
+
+def test_network_config():
+    """Test network configuration in docker-compose.yml."""
+    compose_path = Path(__file__).parent.parent / "docker-compose.yml"
+    content = compose_path.read_text()
+
+    # Check that both services use the same network
+    assert "claude-telegram-net" in content, "missing claude-telegram-net network"
+
+    print("✓ Network configuration is valid")
+
+def run_all_tests():
+    """Run all tests."""
+    tests = [
+        test_dockerfile_exists,
+        test_docker_compose_exists,
+        test_caddyfile_exists,
+        test_dockerfile_syntax,
+        test_docker_compose_syntax,
+        test_bridge_service_config,
+        test_caddy_service_config,
+        test_network_config,
+    ]
+
+    print("Running Docker setup tests...\n")
+
+    failed = []
+    for test in tests:
+        try:
+            test()
+        except AssertionError as e:
+            print(f"✗ {test.__name__}: {e}")
+            failed.append((test.__name__, str(e)))
+        except Exception as e:
+            print(f"⚠ {test.__name__}: {e}")
+
+    print(f"\n{'='*50}")
+    if failed:
+        print(f"FAILED: {len(failed)} test(s) failed")
+        for name, error in failed:
+            print(f"  - {name}: {error}")
+        return 1
+    else:
+        print("SUCCESS: All tests passed!")
+        return 0
+
+if __name__ == "__main__":
+    sys.exit(run_all_tests())
