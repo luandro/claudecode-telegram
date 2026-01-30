@@ -201,3 +201,106 @@ nano .env  # Add your TELEGRAM_BOT_TOKEN and optionally TELEGRAM_WEBHOOK_SECRET
 source .env
 python bridge.py
 ```
+
+## Docker Compose Setup
+
+For production deployments, use Docker Compose with Caddy reverse proxy and HTTPS.
+
+### Prerequisites
+
+```bash
+# Install Docker and Docker Compose
+# On Ubuntu/Debian:
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo usermod -aG docker $USER
+
+# Install Docker Compose (if not included)
+sudo apt-get install docker-compose-plugin
+```
+
+### Configuration
+
+1. **Configure environment variables:**
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+Required variables in `.env`:
+
+- `TELEGRAM_BOT_TOKEN`: Bot token from @BotFather
+- `TELEGRAM_WEBHOOK_SECRET`: (Optional but recommended) Secret token for webhook validation
+
+2. **Configure Caddy reverse proxy:**
+
+Edit `Caddyfile` and replace `coder.luandro.com` with your domain:
+
+```caddyfile
+your-domain.com {
+    reverse_proxy bridge:8080
+    # ... rest of configuration
+}
+```
+
+3. **Update tmux socket path (if needed):**
+
+The `docker-compose.yml` uses `/tmp/tmux-1000/default` by default. If your tmux socket is elsewhere, check with:
+
+```bash
+tmux display-message -p "#{socket_path}"
+```
+
+Then update `TMUX_SOCKET` in your `.env` file.
+
+### Starting the services
+
+```bash
+# Build and start all services
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Check service status
+docker compose ps
+```
+
+### Setting the webhook
+
+After starting the services, set the Telegram webhook:
+
+```bash
+# Using the CLI command (recommended)
+docker compose exec bridge claudecode-telegram set-webhook --domain your-domain.com
+
+# Or manually with curl
+docker compose exec bridge curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://your-domain.com/${TELEGRAM_WEBHOOK_PATH}&secret_token=${TELEGRAM_WEBHOOK_SECRET}"
+```
+
+### Service management
+
+```bash
+# Stop services
+docker compose down
+
+# Restart services
+docker compose restart
+
+# Rebuild after code changes
+docker compose up -d --build
+
+# View logs for specific service
+docker compose logs -f bridge
+docker compose logs -f caddy
+```
+
+### Architecture
+
+The Docker Compose setup includes:
+
+1. **bridge**: Python application that receives Telegram webhooks and communicates with Claude Code via tmux
+2. **caddy**: Reverse proxy providing HTTPS termination, security headers, and automatic SSL certificates via Let's Encrypt
+
+Both services run on an internal Docker network (`claude-telegram-net`) for isolation.
