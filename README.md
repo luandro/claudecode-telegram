@@ -194,6 +194,8 @@ The hook scans staged files for:
 | `PORT`                      | `8080`              | Bridge port                                                                    |
 | `HOST`                      | `127.0.0.1`         | Bridge host (defaults to localhost-only for security)                          |
 | `TELEGRAM_REACTION_EMOJI`   | 👍                  | Emoji to react to messages (set to "none", "false", "0", or empty to disable)  |
+| `CADDY_HTTP_PORT`           | `8081`              | External HTTP port for Caddy (must be >= 1024 for rootless Docker)             |
+| `CADDY_HTTPS_PORT`          | `8443`              | External HTTPS port for Caddy (must be >= 1024 for rootless Docker)            |
 
 ### Access Control
 
@@ -239,6 +241,8 @@ sudo usermod -aG docker $USER
 # Install Docker Compose (if not included)
 sudo apt-get install docker-compose-plugin
 ```
+
+**Note for rootless Docker:** If you're running Docker in rootless mode (common in many setups), you cannot bind to privileged ports below 1024. This project uses port 8081 for HTTP and 8443 for HTTPS by default. You can customize these by setting `CADDY_HTTP_PORT` and `CADDY_HTTPS_PORT` in your `.env` file. For rootful Docker, you can set these to 80 and 443 respectively.
 
 ### Configuration
 
