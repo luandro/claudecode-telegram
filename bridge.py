@@ -24,6 +24,15 @@ WEBHOOK_PATH = os.environ.get("WEBHOOK_PATH", secrets.token_hex(32))
 # Secret token to validate requests are from Telegram (optional but recommended)
 # Set this in Telegram Bot API when setting webhook: ?secret_token=<YOUR_SECRET>
 TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
+# Comma-separated list of allowed Telegram user IDs. If empty, all users are allowed.
+# Get your user ID from @userinfobot on Telegram. Example: "123456789,987654321"
+ALLOWED_TELEGRAM_USER_IDS = set()
+_allowed_ids = os.environ.get("ALLOWED_TELEGRAM_USER_IDS", "").strip()
+if _allowed_ids:
+    try:
+        ALLOWED_TELEGRAM_USER_IDS = set(int(uid.strip()) for uid in _allowed_ids.split(",") if uid.strip())
+    except ValueError:
+        print(f"Warning: Invalid ALLOWED_TELEGRAM_USER_IDS format: {_allowed_ids}")
 
 # Configure reaction emoji with validation
 _REACTION_EMOJI_RAW = os.environ.get("TELEGRAM_REACTION_EMOJI", "\U0001f44d")  # Default: 👍 (thumbs up)
@@ -223,6 +232,13 @@ def get_session_id(project_path):
 
 
 class Handler(BaseHTTPRequestHandler):
+    def _is_user_allowed(self, user_id):
+        """Check if a user ID is allowed to interact with the bot."""
+        if not ALLOWED_TELEGRAM_USER_IDS:
+            # No restriction configured
+            return True
+        return user_id in ALLOWED_TELEGRAM_USER_IDS
+
     def _validate_webhook_path(self):
         """Check if the request path matches the webhook path."""
         # Normalize paths: ensure leading slash for comparison
@@ -283,8 +299,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_callback(self, cb):
         chat_id = cb.get("message", {}).get("chat", {}).get("id")
+        user_id = cb.get("from", {}).get("id")
         data = cb.get("data", "")
         telegram_api("answerCallbackQuery", {"callback_query_id": cb.get("id")})
+
+        # Check if user is allowed
+        if user_id and not self._is_user_allowed(user_id):
+            self.reply(chat_id, "You are not authorized to use this bot")
+            return
 
         if not tmux_exists():
             self.reply(chat_id, "tmux session not found")
@@ -314,7 +336,13 @@ class Handler(BaseHTTPRequestHandler):
     def handle_message(self, update):
         msg = update.get("message", {})
         text, chat_id, msg_id = msg.get("text", ""), msg.get("chat", {}).get("id"), msg.get("message_id")
+        user_id = msg.get("from", {}).get("id")
         if not text or not chat_id:
+            return
+
+        # Check if user is allowed
+        if user_id and not self._is_user_allowed(user_id):
+            self.reply(chat_id, "You are not authorized to use this bot")
             return
 
         with open(CHAT_ID_FILE, "w") as f:
