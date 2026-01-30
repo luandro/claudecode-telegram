@@ -41,6 +41,15 @@ def test_caddyfile_exists():
     assert "bridge:8080" in content, "Caddyfile not pointing to bridge service"
     print("✓ Caddyfile is valid")
 
+def test_caddyfile_domain():
+    """Test that Caddyfile is configured for coder.luandro.com."""
+    caddyfile_path = Path(__file__).parent.parent / "Caddyfile"
+    assert caddyfile_path.exists(), "Caddyfile not found"
+
+    content = caddyfile_path.read_text()
+    assert "coder.luandro.com" in content, "Caddyfile not configured for coder.luandro.com"
+    print("✓ Caddyfile domain is configured for coder.luandro.com")
+
 def test_dockerfile_syntax():
     """Test Dockerfile syntax using docker command."""
     try:
@@ -133,6 +142,7 @@ def run_all_tests():
         test_dockerfile_exists,
         test_docker_compose_exists,
         test_caddyfile_exists,
+        test_caddyfile_domain,
         test_dockerfile_syntax,
         test_docker_compose_syntax,
         test_bridge_service_config,
