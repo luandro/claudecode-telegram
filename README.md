@@ -161,16 +161,32 @@ curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://Y
 
 ## Environment Variables
 
-| Variable                  | Default             | Description                                                                    |
-| ------------------------- | ------------------- | ------------------------------------------------------------------------------ |
-| `TELEGRAM_BOT_TOKEN`      | required            | Bot token from BotFather                                                       |
-| `TELEGRAM_WEBHOOK_SECRET` | empty               | Secret token to validate webhook requests from Telegram (strongly recommended) |
-| `WEBHOOK_DOMAIN`          | `coder.luandro.com` | Default domain for set-webhook command                                         |
-| `TMUX_SESSION`            | `claude`            | tmux session name                                                              |
-| `PORT`                    | `8080`              | Bridge port                                                                    |
-| `HOST`                    | `127.0.0.1`         | Bridge host (defaults to localhost-only for security)                          |
-| `WEBHOOK_PATH`            | auto-generated      | Random webhook path (64-char hex string) for security                          |
-| `TELEGRAM_REACTION_EMOJI` | ``                  | Emoji to react to messages (set to "none", "false", "0", or empty to disable)  |
+| Variable                    | Default             | Description                                                                    |
+| --------------------------- | ------------------- | ------------------------------------------------------------------------------ |
+| `TELEGRAM_BOT_TOKEN`        | required            | Bot token from @BotFather on Telegram                                          |
+| `TELEGRAM_WEBHOOK_SECRET`   | empty               | Secret token to validate webhook requests from Telegram (strongly recommended) |
+| `WEBHOOK_DOMAIN`            | `coder.luandro.com` | Default domain for set-webhook command                                         |
+| `WEBHOOK_PATH`              | auto-generated      | Random webhook path (64-char hex string) for security                          |
+| `ALLOWED_TELEGRAM_USER_IDS` | empty               | Comma-separated list of allowed Telegram user IDs for groups/channels          |
+| `DM_ALLOWED_USER_ID`        | empty               | Single user ID allowed to send DM updates (private messages)                   |
+| `TMUX_SESSION`              | `claude`            | tmux session name                                                              |
+| `PORT`                      | `8080`              | Bridge port                                                                    |
+| `HOST`                      | `127.0.0.1`         | Bridge host (defaults to localhost-only for security)                          |
+| `TELEGRAM_REACTION_EMOJI`   | 👍                  | Emoji to react to messages (set to "none", "false", "0", or empty to disable)  |
+
+### Access Control
+
+The bot supports two types of access control:
+
+1. **DM (Private Message) Control**: `DM_ALLOWED_USER_ID`
+   - Only the specified user ID can interact via private messages
+   - Get your user ID from [@userinfobot](https://t.me/userinfobot) on Telegram
+   - If empty or not set, DM updates are not allowed from anyone
+
+2. **Group/Channel Control**: `ALLOWED_TELEGRAM_USER_IDS`
+   - Comma-separated list of user IDs allowed to use the bot in groups/channels
+   - Example: `123456789,987654321`
+   - If empty, all users can use the bot in groups/channels (not recommended for production)
 
 ### Quick Setup with .env
 

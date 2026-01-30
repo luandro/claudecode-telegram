@@ -1,0 +1,12 @@
+{
+  "category": "functional",
+  "description": "Reverse proxy serves HTTPS for coder.luandro.com and forwards to bridge",
+  "steps": [
+    "Add a Caddyfile for coder.luandro.com",
+    "Configure reverse_proxy to the internal bridge address",
+    "Enable automatic HTTP to HTTPS redirects",
+    "Start the proxy and confirm HTTPS certificate is issued",
+    "Verify HTTPS requests reach the bridge"
+  ],
+  "passes": false
+}

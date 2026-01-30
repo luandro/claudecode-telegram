@@ -1,0 +1,12 @@
+{
+  "category": "functional",
+  "description": "Only allowed Telegram user IDs can trigger tmux commands",
+  "steps": [
+    "Add ALLOWED_TELEGRAM_USER_IDS to .env",
+    "Parse the list into integers at bridge startup",
+    "Reject updates whose message.from.id is not in the allowlist",
+    "Return a safe 200 response without action for unauthorized users",
+    "Verify user 244055394 is accepted while others are ignored"
+  ],
+  "passes": false
+}

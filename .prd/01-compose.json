@@ -1,0 +1,12 @@
+{
+  "category": "functional",
+  "description": "Docker Compose runs bridge and reverse proxy with private networking",
+  "steps": [
+    "Create docker-compose.yml with bridge and caddy services",
+    "Ensure bridge exposes only an internal port and no host ports",
+    "Expose ports 80 and 443 on the caddy service",
+    "Place both services on an internal Docker network",
+    "Start the stack and confirm bridge is reachable only via proxy"
+  ],
+  "passes": false
+}

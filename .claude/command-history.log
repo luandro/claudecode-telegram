@@ -1,0 +1,890 @@
+[2026-01-29 18:19:20] git diff bridge.py
+[2026-01-29 18:20:25] git diff HEAD
+[2026-01-29 18:20:25] git remote -v
+[2026-01-29 18:25:55] git log --oneline -5
+[2026-01-29 18:25:55] git diff HEAD
+[2026-01-29 18:26:03] git add bridge.py && git commit -m "$(cat <<'EOF'
+feat: configurable reaction emoji and improved error logging
+
+- Add TELEGRAM_REACTION_EMOJI env var to customize message reactions
+- Add validation to strip whitespace and allow explicit disable ("none"/"false")
+- Improve Telegram API error logging with method and response body
+- Redact sensitive fields (text, caption) from error logs to prevent data leakage
+EOF
+)"
+[2026-01-29 18:26:16] gh repo fork hanxiao/claudecode-telegram --org luandro --remote-name fork 2>&1 || echo "Fork may already exist"
+[2026-01-29 18:26:25] gh repo fork hanxiao/claudecode-telegram --remote-name fork
+[2026-01-29 18:26:31] git remote -v && git push fork main 2>&1 || (git push -u fork main && git push fork main)
+[2026-01-29 18:26:36] gh repo view luandro/claudecode-telegram --json url,owner 2>&1 || echo "Fork may not exist yet"
+[2026-01-29 18:26:43] git remote add fork https://github.com/luandro/claudecode-telegram.git 2>/dev/null || git remote set-url fork https://github.com/luandro/claudecode-telegram.git
+[2026-01-29 18:26:56] git push -u fork main
+[2026-01-29 18:27:01] git config --local credential.helper "!gh auth git-credential"
+[2026-01-29 18:27:07] git push -u fork main
+[2026-01-29 18:28:10] git show HEAD --stat
+[2026-01-29 18:28:10] git show HEAD
+[2026-01-29 18:31:15] git add bridge.py && git commit --amend --no-edit
+[2026-01-29 18:31:23] git push fork main --force-with-lease
+[2026-01-29 18:31:29] git show HEAD
+[2026-01-29 18:32:24] git add bridge.py && git commit --amend --no-edit && git push fork main --force-with-lease
+[2026-01-29 18:32:44] git show HEAD
+[2026-01-29 18:34:20] git add bridge.py && git commit --amend --no-edit && git push fork main --force-with-lease
+[2026-01-29 18:34:32] git show HEAD
+[2026-01-29 18:44:51] git add bridge.py && git commit --amend --no-edit && git push fork main --force-with-lease
+[2026-01-29 18:45:01] git show HEAD
+[2026-01-29 18:46:28] git add bridge.py && git commit --amend --no-edit && git push fork main --force-with-lease
+[2026-01-29 19:02:35] git diff bridge.py
+[2026-01-29 19:12:06] git show HEAD~2:bridge.py | grep -A2 " setMessageReaction"
+[2026-01-29 19:12:14] git log --oneline -10
+[2026-01-29 19:12:23] git show 958c890:bridge.py | grep -B2 -A2 " setMessageReaction"
+[2026-01-29 19:12:33] git show c925f90:bridge.py | grep -n "2705"
+[2026-01-29 19:13:43] git add bridge.py && git commit --amend --no-edit && git push fork main --force-with-lease
+[2026-01-29 19:17:05] find /home/luandro/Dev/digidem/AI/claudecode-telegram -name "*hook*" -type f 2>/dev/null
+[2026-01-29 19:17:05] ls -la /home/luandro/Dev/digidem/AI/claudecode-telegram/.claude/
+[2026-01-29 19:17:27] ls -la /home/luandro/Dev/digidem/AI/claudecode-telegram/
+[2026-01-29 19:17:27] ls -la ~/.claude/ 2>/dev/null | head -30
+[2026-01-29 19:17:31] ls -la /home/luandro/Dev/digidem/AI/claudecode-telegram/hooks/
+[2026-01-29 19:31:06] git diff bridge.py
+[2026-01-29 19:31:29] git add bridge.py && git commit --amend --no-edit && git push fork main --force-with-lease
+[2026-01-30 09:30:46] chmod +x /home/luandro/Dev/digidem/AI/claudecode-telegram/tests/test_docker.py
+[2026-01-30 09:30:54] python tests/test_docker.py
+[2026-01-30 09:31:15] command -v ruff 2>/dev/null && echo "ruff available" || echo "ruff not found"; command -v flake8 2>/dev/null && echo "flake8 available" || echo "flake8 not found"; command -v pylint 2>/dev/null && echo "pylint available" || echo "pylint not found"
+[2026-01-30 09:31:46] docker-compose config --quiet 2>&1 || echo "docker-compose config validation completed with code: $?"
+[2026-01-30 09:32:15] docker-compose config >/dev/null 2>&1 && echo "✓ docker-compose.yml syntax is valid" || echo "⚠ docker-compose validation skipped or failed"
+[2026-01-30 09:32:49] git status
+[2026-01-30 09:32:49] git log --oneline -5
+[2026-01-30 09:32:49] git diff --stat
+[2026-01-30 09:33:05] git add Dockerfile docker-compose.yml Caddyfile tests/test_docker.py && git commit -m "$(cat <<'EOF'
+feat: add Docker setup with docker-compose, Caddy reverse proxy
+
+Add Docker configuration for running the bridge service with Caddy as a reverse proxy. Includes:
+- Dockerfile for bridge service (Python 3.13 slim base)
+- docker-compose.yml with bridge and caddy services
+- Caddyfile with reverse proxy config and security headers
+- Tests for Docker setup validation
+
+Services:
+- bridge: Python HTTP server receiving Telegram webhooks
+- caddy: Reverse proxy with TLS termination and security headers
+EOF
+)"
+[2026-01-30 09:33:20] git status
+[2026-01-30 09:34:20] ls -la /home/luandro/Dev/digidem/AI/claudecode-telegram/
+[2026-01-30 09:35:08] ls -la /home/luandro/Dev/digidem/AI/claudecode-telegram/tests/
+[2026-01-30 09:36:09] source .venv/bin/activate && python tests/test_docker.py
+[2026-01-30 09:36:26] source .venv/bin/activate && python -m ruff check tests/test_docker.py Caddyfile 2>&1 || echo "ruff not installed or no issues found"
+[2026-01-30 09:36:34] source .venv/bin/activate && python -m flake8 tests/test_docker.py --max-line-length=120 2>&1 || echo "flake8 not installed or no issues found"
+[2026-01-30 09:36:49] source .venv/bin/activate && python -m py_compile tests/test_docker.py && echo "Python syntax valid"
+[2026-01-30 09:37:14] git status
+[2026-01-30 09:37:20] git diff Caddyfile && git diff tests/test_docker.py
+[2026-01-30 09:37:27] git add Caddyfile tests/test_docker.py && git commit -m "$(cat <<'EOF'
+feat: configure Caddyfile for coder.luandro.com domain
+
+Update Caddyfile to use the specific domain coder.luandro.com instead of
+the generic placeholder {$CADDY_DOMAIN:localhost}. Add test to verify
+the domain configuration.
+EOF
+)"
+[2026-01-30 09:40:30] source .venv/bin/activate && python -m py_compile bridge.py 2>&1
+[2026-01-30 09:40:40] source .venv/bin/activate && ruff check bridge.py .env.example 2>&1 || echo "ruff not installed, checking flake8..." && which flake8 || echo "No linter found in environment"
+[2026-01-30 09:41:18] git status
+[2026-01-30 09:41:18] git diff --staged
+[2026-01-30 09:41:18] git log --oneline -5
+[2026-01-30 09:41:25] git add .env.example README.md && git commit -m "$(cat <<'EOF'
+docs: add .env.example template and update env var docs
+
+- Add .env.example with all required and optional environment variables
+- Document TELEGRAM_REACTION_EMOJI in the environment variables table
+- Add quick setup section showing how to use .env file
+EOF
+)"
+[2026-01-30 09:41:42] git status
+[2026-01-30 09:44:10] chmod +x /home/luandro/Dev/digidem/AI/claudecode-telegram/tests/test_network_isolation.sh
+[2026-01-30 09:44:26] ./tests/test_network_isolation.sh 2>&1
+[2026-01-30 09:44:27] ls -la ~/.claude/plugins/ 2>/dev/null || echo "No plugins directory found"
+[2026-01-30 09:44:33] ls -la ~/.claude/plugins/marketplaces/ 2>/dev/null
+[2026-01-30 09:44:41] find ~/.claude/plugins/marketplaces -name "*ralph*" -type d 2>/dev/null
+[2026-01-30 09:44:53] ls -la ~/.claude/plugins/marketplaces/claude-plugins-official/plugins/ralph-loop/
+[2026-01-30 09:45:10] ls -la ~/.claude/plugins/marketplaces/claude-plugins-official/plugins/ralph-loop/commands/ ~/.claude/plugins/marketplaces/claude-plugins-official/plugins/ralph-loop/.claude-plugin/
+[2026-01-30 09:46:42] ./tests/test_network_isolation.sh 2>&1
+[2026-01-30 09:47:12] docker ps -a | grep claudecode
+[2026-01-30 09:47:21] curl -s --connect-timeout 2 http://localhost:8080 && echo "FAIL: Bridge accessible from host" || echo "PASS: Bridge not accessible from host"
+[2026-01-30 09:47:24] docker port claudecode-telegram-bridge 2>/dev/null || echo "No ports mapped (isolated)"
+[2026-01-30 09:47:34] cat ~/.claude/plugins/installed_plugins.json | grep -A5 "ralph-loop" || echo "Not found in installed plugins"
+[2026-01-30 09:47:49] grep -r "ralph-loop" ~/.claude/plugins/commands/ 2>/dev/null | head -5 || echo "Checking installed commands..."
+[2026-01-30 09:47:54] ls -la ~/.claude/plugins/cache/claude-plugins-official/ralph-loop/e30768372b41/ 2>/dev/null
+[2026-01-30 09:48:11] chmod +x /home/luandro/Dev/digidem/AI/claudecode-telegram/tests/test_network_isolation_simple.sh
+[2026-01-30 09:48:13] cat ~/.claude/plugins/cache/claude-plugins-official/ralph-loop/e30768372b41/commands/ralph-loop.md
+[2026-01-30 09:48:19] ./tests/test_network_isolation_simple.sh 2>&1
+[2026-01-30 09:48:38] docker exec claudecode-telegram-bridge curl -s --connect-timeout 2 http://localhost:8080 && echo " - Bridge internal access works"
+[2026-01-30 09:49:11] ./tests/test_network_isolation.sh 2>&1
+[2026-01-30 09:49:43] shellcheck tests/test_network_isolation.sh tests/test_network_isolation_simple.sh 2>&1 || true
+[2026-01-30 09:49:52] sh -n tests/test_network_isolation.sh && sh -n tests/test_network_isolation_simple.sh && echo "Shell syntax check passed"
+[2026-01-30 09:50:23] git diff docker-compose.yml
+[2026-01-30 09:50:23] git status
+[2026-01-30 09:50:56] git add docker-compose.yml tests/test_network_isolation.sh tests/test_network_isolation_simple.sh && git commit -m "$(cat <<'EOF'
+feat: isolate bridge container from public network access
+
+- Remove exposed ports from bridge service in docker-compose.yml
+- Bridge is now only accessible via internal Docker network through Caddy
+- Add comprehensive network isolation tests to verify security posture
+- Tests confirm bridge is not accessible from host while maintaining internal connectivity
+
+Security improvement: External traffic must now go through the Caddy reverse
+proxy, preventing direct access to the bridge service from the host network.
+EOF
+)"
+[2026-01-30 09:53:08] python tests/test_bridge_network.py
+[2026-01-30 09:53:23] python tests/test_docker.py
+[2026-01-30 09:53:34] python -m py_compile bridge.py && echo "Syntax check passed"
+[2026-01-30 09:53:50] python -c "
+import ast
+import sys
+
+# Check bridge.py syntax and quality
+with open('bridge.py') as f:
+    code = f.read()
+
+# Parse the AST
+try:
+    tree = ast.parse(code)
+    print('✓ bridge.py: Valid Python syntax')
+except SyntaxError as e:
+    print(f'✗ bridge.py: Syntax error: {e}')
+    sys.exit(1)
+
+# Check for common issues
+issues = []
+
+# Check for unused imports (basic check)
+imports = [node.names[0].name for node in ast.walk(tree) if isinstance(node, ast.Import) or isinstance(node, ast.ImportFrom)]
+# urllib is used, so that's fine
+
+# Check for proper string formatting
+if 'HTTPServer((\"0.0.0.0\", PORT)' in code:
+    issues.append('Hardcoded 0.0.0.0 found')
+
+# Check for HOST variable usage
+if 'HOST = os.environ.get' in code:
+    print('✓ bridge.py: HOST environment variable configured')
+else:
+    issues.append('HOST environment variable not configured')
+
+if 'HTTPServer((HOST, PORT)' in code:
+    print('✓ bridge.py: HTTPServer uses HOST variable')
+else:
+    issues.append('HTTPServer does not use HOST variable')
+
+if issues:
+    for issue in issues:
+        print(f'⚠ bridge.py: {issue}')
+    sys.exit(1)
+else:
+    print('✓ bridge.py: All quality checks passed')
+"
+[2026-01-30 09:54:03] # Verify the bridge starts with default settings (localhost)
+unset HOST
+unset PORT
+python -c "
+import bridge
+print('Testing default configuration...')
+print(f'  HOST: {bridge.HOST} (expected: 127.0.0.1)')
+print(f'  PORT: {bridge.PORT} (expected: 8080)')
+assert bridge.HOST == '127.0.0.1', f'HOST should be 127.0.0.1, got {bridge.HOST}'
+assert bridge.PORT == 8080, f'PORT should be 8080, got {bridge.PORT}'
+print('✓ Default configuration correct (localhost-only)')
+" &&
+
+# Verify the bridge respects custom HOST
+HOST=0.0.0.0 python -c "
+import bridge
+print('Testing custom HOST configuration...')
+print(f'  HOST: {bridge.HOST} (expected: 0.0.0.0)')
+assert bridge.HOST == '0.0.0.0', f'HOST should be 0.0.0.0, got {bridge.HOST}'
+print('✓ Custom HOST configuration respected')
+" &&
+
+# Verify the bridge respects custom PORT
+PORT=9090 python -c "
+import bridge
+print('Testing custom PORT configuration...')
+print(f'  PORT: {bridge.PORT} (expected: 9090)')
+assert bridge.PORT == 9090, f'PORT should be 9090, got {bridge.PORT}'
+print('✓ Custom PORT configuration respected')
+" &&
+
+echo ""
+echo "All verification checks passed!"
+[2026-01-30 09:54:25] git diff bridge.py
+[2026-01-30 09:54:25] git status
+[2026-01-30 09:54:31] git add bridge.py tests/test_bridge_network.py && git commit -m "$(cat <<'EOF'
+feat: configure bridge service to listen on localhost by default
+
+- Add HOST environment variable with default value 127.0.0.1
+- Change HTTPServer to bind to HOST instead of hardcoded 0.0.0.0
+- Update status output to show configured HOST:PORT
+- Add tests for network configuration feature
+
+This change improves security by defaulting to localhost-only binding,
+preventing accidental exposure to external networks. The HOST env var
+can be set to 0.0.0.0 if needed for specific use cases.
+EOF
+)"
+[2026-01-30 09:55:13] docker-compose config 2>&1 | grep -A 20 "ports:"
+[2026-01-30 09:56:45] chmod +x /home/luandro/Dev/digidem/AI/claudecode-telegram/tests/test_https_redirect.py
+[2026-01-30 09:56:57] python tests/test_https_redirect.py
+[2026-01-30 09:57:07] python tests/test_docker.py
+[2026-01-30 09:57:34] command -v ruff && echo "ruff available" || command -v flake8 && echo "flake8 available" || command -v pylint && echo "pylint available" || echo "No python linter found"
+[2026-01-30 09:57:41] python -m py_compile tests/test_https_redirect.py && echo "Python syntax check passed"
+[2026-01-30 09:58:04] git diff
+[2026-01-30 09:58:04] git status
+[2026-01-30 09:58:14] git add Caddyfile tests/test_https_redirect.py && git commit -m "$(cat <<'EOF'
+feat: ensure HTTP redirects to HTTPS
+
+Add explicit HTTP to HTTPS redirect block in Caddyfile with permanent (301) redirect. All HTTP requests to coder.luandro.com will now be automatically redirected to HTTPS, preserving the URI path and query string. This ensures secure connections and complies with security best practices.
+
+Added comprehensive tests in tests/test_https_redirect.py to validate:
+- Explicit HTTP redirect block exists
+- Permanent redirect (301) is used
+- Redirect points to HTTPS URL
+- URI path and query string are preserved
+- HTTPS block has reverse_proxy configuration
+- HSTS header is configured
+EOF
+)"
+[2026-01-30 09:59:10] agent-browser open http://localhost:8080
+[2026-01-30 09:59:20] ps aux | grep -E "(bridge|python.*bridge)" | grep -v grep
+[2026-01-30 09:59:20] ss -tlnp 2>/dev/null | grep -E ":(8080|443|80)" || netstat -tlnp 2>/dev/null | grep -E ":(8080|443|80)"
+[2026-01-30 09:59:31] ss -tlnp 2>/dev/null | grep python || netstat -tlnp 2>/dev/null | grep python
+[2026-01-30 09:59:42] lsof -i -P -n 2>/dev/null | grep -E "(python|bridge|8080)" || echo "lsof not available"
+[2026-01-30 09:59:58] docker ps -a --filter "name=claudecode-telegram"
+[2026-01-30 10:00:16] docker start claudecode-telegram-caddy
+[2026-01-30 10:00:26] docker logs claudecode-telegram-caddy 2>&1 | tail -20
+[2026-01-30 10:00:41] docker exec claudecode-telegram-bridge curl -s http://localhost:8080
+[2026-01-30 10:00:49] docker network inspect claudecode-telegram_claude-telegram-net --format '{{range .Containers}}{{.Name}}: {{.IPv4Address}}{{"\n"}}{{end}}'
+[2026-01-30 10:01:00] docker run --rm --network claudecode-telegram_claude-telegram-net alpine/curl -s http://bridge:8080
+[2026-01-30 10:01:33] chmod +x test_reverse_proxy.py && python test_reverse_proxy.py
+[2026-01-30 10:01:49] curl -s http://127.0.0.1:8080 || echo "Failed to connect"
+[2026-01-30 10:02:06] cat /proc/737959/cmdline | tr '\0' ' ' && echo && ls -l /proc/737959/fd 2>/dev/null | grep -E "(socket|PIPE)" || echo "Process check"
+[2026-01-30 10:02:10] ss -tlnp 2>/dev/null | grep 737959 || ss -tlnp 2>/dev/null | grep python || netstat -tlnp 2>/dev/null | grep python
+[2026-01-30 10:02:16] ss -tlnp 2>/dev/null | head -20
+[2026-01-30 10:02:32] python test_reverse_proxy.py
+[2026-01-30 10:02:57] python -m pylint test_reverse_proxy.py 2>&1 || python -m flake8 test_reverse_proxy.py 2>&1 || ruff check test_reverse_proxy.py 2>&1 || echo "No linter found, checking syntax..."
+[2026-01-30 10:03:05] python -m py_compile test_reverse_proxy.py && echo "Syntax OK"
+[2026-01-30 10:03:19] git diff test_reverse_proxy.py
+[2026-01-30 10:03:19] git status
+[2026-01-30 10:03:26] git add test_reverse_proxy.py && git commit -m "$(cat <<'EOF'
+test: add reverse proxy verification test
+
+Add test_reverse_proxy.py to verify the Caddy reverse proxy
+configuration correctly forwards requests to the bridge service.
+
+Tests verify:
+- Bridge container health status
+- Bridge responds inside container on port 8080
+- Docker network connectivity between containers
+- Caddy configuration validity
+- Bridge reachable via Docker network
+
+All tests pass, confirming reverse proxy setup works correctly.
+EOF
+)"
+[2026-01-30 10:06:14] chmod +x /home/luandro/Dev/digidem/AI/claudecode-telegram/tests/test_webhook_path.py
+[2026-01-30 10:06:29] python -m pytest tests/test_webhook_path.py -v
+[2026-01-30 10:06:38] python -m pytest tests/ -v --ignore=tests/test_network_isolation.sh --ignore=tests/test_network_isolation_simple.sh
+[2026-01-30 10:06:55] python -m ruff check bridge.py tests/test_webhook_path.py
+[2026-01-30 10:07:02] python -m pylint bridge.py --disable=all --enable=E 2>/dev/null || python -m flake8 bridge.py --select=E,W 2>/dev/null || python -c "import ast; ast.parse(open('bridge.py').read()); print('Syntax OK')"
+[2026-01-30 10:07:12] python -c "import ast; ast.parse(open('tests/test_webhook_path.py').read()); print('Syntax OK')"
+[2026-01-30 10:07:22] python -c "
+import bridge
+import os
+
+# Test 1: Verify WEBHOOK_PATH is set and has correct length
+print(f'Test 1: WEBHOOK_PATH length = {len(bridge.WEBHOOK_PATH)}')
+assert len(bridge.WEBHOOK_PATH) == 64, f'Expected 64 chars, got {len(bridge.WEBHOOK_PATH)}'
+
+# Test 2: Verify it's a valid hex string
+print('Test 2: WEBHOOK_PATH is valid hex string')
+assert all(c in '0123456789abcdef' for c in bridge.WEBHOOK_PATH), 'Invalid hex characters'
+
+# Test 3: Verify Handler validation method works
+print('Test 3: Handler._validate_webhook_path method exists')
+assert hasattr(bridge.Handler, '_validate_webhook_path'), 'Missing _validate_webhook_path method'
+
+# Test 4: Test the validation logic
+class MockHandler:
+    def __init__(self, path):
+        self.path = path
+    def validate(self):
+        return bridge.Handler._validate_webhook_path(self)
+
+handler_valid = MockHandler('/' + bridge.WEBHOOK_PATH)
+handler_invalid = MockHandler('/invalid_path')
+print('Test 4: Path validation works')
+assert handler_valid.validate() == True, 'Valid path should return True'
+assert handler_invalid.validate() == False, 'Invalid path should return False'
+
+print('All functional tests passed!')
+"
+[2026-01-30 10:07:41] git log --oneline -5
+[2026-01-30 10:07:41] git diff bridge.py
+[2026-01-30 10:07:41] git status
+[2026-01-30 10:07:55] git add bridge.py .env.example README.md tests/test_webhook_path.py && git commit -m "$(cat <<'EOF'
+feat: add random WEBHOOK_PATH for security
+
+Add a 64-character hex webhook path to prevent unauthorized access
+to the webhook endpoint. The path is auto-generated using secrets.token_hex(32)
+and can be customized via the WEBHOOK_PATH environment variable.
+
+- Add WEBHOOK_PATH env var with 64-char hex default
+- Add _validate_webhook_path() method to Handler class
+- Update do_POST and do_GET to validate webhook path (404 on mismatch)
+- Update main() to display webhook path in startup message
+- Add comprehensive test suite (9 tests covering validation)
+- Update documentation in README.md and .env.example
+EOF
+)"
+[2026-01-30 10:11:33] cat /home/luandro/Dev/digidem/AI/claudecode-telegram/README.md
+[2026-01-30 10:12:02] cat > /home/luandro/Dev/digidem/AI/claudecode-telegram/README.md << 'EOF'
+# claudecode-telegram
+
+![demo](demo.gif)
+
+Telegram bot bridge for Claude Code. Send messages from Telegram, get responses back.
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[Telegram] --> B[Cloudflare Tunnel]
+    B --> C[Bridge Server]
+    C -->|tmux send-keys| D[Claude Code]
+    D -->|Stop Hook| E[Read Transcript]
+    E -->|Send Response| A
+```
+
+1. Bridge receives Telegram webhooks, injects messages into Claude Code via tmux
+2. Claude Code's Stop hook reads the transcript and sends response back to Telegram
+3. Only responds to Telegram-initiated messages (uses pending file as flag)
+
+## Install
+
+```bash
+# Prerequisites
+brew install tmux cloudflared
+
+# Clone
+git clone https://github.com/hanxiao/claudecode-telegram
+cd claudecode-telegram
+
+# Setup Python env
+uv venv && source .venv/bin/activate
+uv pip install -e .
+```
+
+## Setup
+
+### 1. Create Telegram bot
+
+Bot receives your messages and sends Claude's responses back.
+
+```bash
+# Message @BotFather on Telegram, create bot, get token
+```
+
+### 2. Configure Stop hook
+
+Hook triggers when Claude finishes responding, reads transcript, sends to Telegram.
+
+```bash
+cp hooks/send-to-telegram.sh ~/.claude/hooks/
+nano ~/.claude/hooks/send-to-telegram.sh  # set your bot token
+chmod +x ~/.claude/hooks/send-to-telegram.sh
+```
+
+Add to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/send-to-telegram.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### 3. Start tmux + Claude
+
+tmux keeps Claude Code running persistently; bridge injects messages via `send-keys`.
+
+```bash
+tmux new -s claude
+claude --dangerously-skip-permissions
+```
+
+### 4. Run bridge
+
+Bridge receives Telegram webhooks and injects messages into Claude Code.
+
+```bash
+export TELEGRAM_BOT_TOKEN="your_token"
+python bridge.py
+# Note the webhook path shown in output (e.g., /<64-char-random-string>)
+```
+
+### 5. Expose via Cloudflare Tunnel
+
+Tunnel exposes local bridge to the internet so Telegram can reach it.
+
+```bash
+cloudflared tunnel --url http://localhost:8080
+```
+
+### 6. (Optional but Recommended) Set webhook secret token
+
+Generate a secure secret token to validate requests are from Telegram:
+
+```bash
+# Generate a secure random token
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+Set the `TELEGRAM_WEBHOOK_SECRET` environment variable with the generated token:
+
+```bash
+export TELEGRAM_WEBHOOK_SECRET="<generated_token>"
+```
+
+### 7. Set webhook
+
+Tells Telegram where to send message updates. Include the webhook path shown when starting the bridge. If you set a secret token, include it in the webhook URL.
+
+```bash
+# Replace <WEBHOOK_PATH> with the path shown in bridge output (e.g., /abc123...)
+# Replace <SECRET_TOKEN> with your TELEGRAM_WEBHOOK_SECRET if configured
+curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://YOUR-TUNNEL-URL.trycloudflare.com/<WEBHOOK_PATH>&secret_token=<SECRET_TOKEN>"
+```
+
+## Bot Commands
+
+| Command          | Description                              |
+| ---------------- | ---------------------------------------- |
+| `/status`        | Check tmux session                       |
+| `/clear`         | Clear conversation                       |
+| `/resume`        | Pick session to resume (inline keyboard) |
+| `/continue_`     | Auto-continue most recent                |
+| `/loop <prompt>` | Start Ralph Loop (5 iterations)          |
+| `/stop`          | Interrupt Claude                         |
+
+## Environment Variables
+
+| Variable                   | Default        | Description                                                                      |
+| -------------------------- | -------------- | -------------------------------------------------------------------------------- |
+| `TELEGRAM_BOT_TOKEN`       | required       | Bot token from BotFather                                                         |
+| `TELEGRAM_WEBHOOK_SECRET`  | empty          | Secret token to validate webhook requests from Telegram (strongly recommended)   |
+| `TMUX_SESSION`             | `claude`       | tmux session name                                                                |
+| `PORT`                     | `8080`         | Bridge port                                                                      |
+| `HOST`                     | `127.0.0.1`    | Bridge host (defaults to localhost-only for security)                            |
+| `WEBHOOK_PATH`             | auto-generated | Random webhook path (64-char hex string) for security                            |
+| `TELEGRAM_REACTION_EMOJI`  | ``             | Emoji to react to messages (set to "none", "false", "0", or empty to disable)    |
+
+### Quick Setup with .env
+
+```bash
+# Copy the example environment file
+cp .env.example .env
+
+# Edit with your values
+nano .env  # Add your TELEGRAM_BOT_TOKEN and optionally TELEGRAM_WEBHOOK_SECRET
+
+# Source the file before running the bridge
+source .env
+python bridge.py
+```
+EOF
+[2026-01-30 10:12:34] python -m pytest tests/test_webhook_secret.py -v
+[2026-01-30 10:13:21] cat > /home/luandro/Dev/digidem/AI/claudecode-telegram/tests/test_webhook_secret.py << 'EOF'
+#!/usr/bin/env python3
+"""Tests for webhook secret token validation"""
+
+import json
+import os
+import sys
+import unittest
+from http.client import HTTPConnection
+from threading import Thread
+from time import sleep
+
+# Add parent directory to path to import bridge module
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import bridge
+
+
+def start_server(port, host='127.0.0.1'):
+    """Start the bridge server in a separate thread."""
+    # Override the port and host for testing
+    bridge.PORT = port
+    bridge.HOST = host
+    # Use a fixed webhook path for testing
+    bridge.WEBHOOK_PATH = 'test_webhook_path_12345'
+    # Set a test secret token
+    bridge.TELEGRAM_WEBHOOK_SECRET = 'test_secret_token_abc123'
+
+    server = bridge.HTTPServer((host, port), bridge.Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    sleep(0.5)  # Give server time to start
+    return server
+
+
+class TestWebhookSecretValidation(unittest.TestCase):
+    """Test webhook secret token validation."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Start test server."""
+        cls.test_port = 18081
+        cls.server = start_server(cls.test_port)
+
+    @classmethod
+    def tearDownClass(cls):
+        """Shutdown test server."""
+        if hasattr(cls, 'server'):
+            cls.server.shutdown()
+
+    def test_valid_secret_token_allows_request(self):
+        """Test POST request with valid secret token returns 200."""
+        conn = HTTPConnection('127.0.0.1', self.test_port)
+        headers = {
+            'Content-Type': 'application/json',
+            'X-Telegram-Bot-Api-Secret-Token': 'test_secret_token_abc123'
+        }
+        test_data = {'update_id': 1}
+        conn.request('POST', '/test_webhook_path_12345', body=json.dumps(test_data).encode(), headers=headers)
+        response = conn.getresponse()
+        self.assertEqual(response.status, 200)
+        conn.close()
+
+    def test_invalid_secret_token_rejects_request(self):
+        """Test POST request with invalid secret token returns 401."""
+        conn = HTTPConnection('127.0.0.1', self.test_port)
+        headers = {
+            'Content-Type': 'application/json',
+            'X-Telegram-Bot-Api-Secret-Token': 'wrong_secret_token'
+        }
+        test_data = {'update_id': 1}
+        conn.request('POST', '/test_webhook_path_12345', body=json.dumps(test_data).encode(), headers=headers)
+        response = conn.getresponse()
+        self.assertEqual(response.status, 401)
+        self.assertEqual(response.read(), b'Unauthorized')
+        conn.close()
+
+    def test_missing_secret_token_rejects_request(self):
+        """Test POST request without secret token header returns 401 when secret is configured."""
+        conn = HTTPConnection('127.0.0.1', self.test_port)
+        headers = {'Content-Type': 'application/json'}
+        test_data = {'update_id': 1}
+        conn.request('POST', '/test_webhook_path_12345', body=json.dumps(test_data).encode(), headers=headers)
+        response = conn.getresponse()
+        self.assertEqual(response.status, 401)
+        self.assertEqual(response.read(), b'Unauthorized')
+        conn.close()
+
+    def test_empty_secret_token_rejects_request(self):
+        """Test POST request with empty secret token returns 401."""
+        conn = HTTPConnection('127.0.0.1', self.test_port)
+        headers = {
+            'Content-Type': 'application/json',
+            'X-Telegram-Bot-Api-Secret-Token': ''
+        }
+        test_data = {'update_id': 1}
+        conn.request('POST', '/test_webhook_path_12345', body=json.dumps(test_data).encode(), headers=headers)
+        response = conn.getresponse()
+        self.assertEqual(response.status, 401)
+        conn.close()
+
+    def test_secret_token_case_sensitive(self):
+        """Test that secret token comparison is case-sensitive."""
+        conn = HTTPConnection('127.0.0.1', self.test_port)
+        headers = {
+            'Content-Type': 'application/json',
+            'X-Telegram-Bot-Api-Secret-Token': 'Test_Secret_Token_Abc123'  # Different case
+        }
+        test_data = {'update_id': 1}
+        conn.request('POST', '/test_webhook_path_12345', body=json.dumps(test_data).encode(), headers=headers)
+        response = conn.getresponse()
+        self.assertEqual(response.status, 401)
+        conn.close()
+
+
+class TestWebhookSecretDisabled(unittest.TestCase):
+    """Test behavior when webhook secret is not configured."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Start test server without secret configured."""
+        cls.test_port = 18082
+        # Override the port and host for testing
+        bridge.PORT = cls.test_port
+        bridge.HOST = '127.0.0.1'
+        # Use a fixed webhook path for testing
+        bridge.WEBHOOK_PATH = 'test_webhook_path_no_secret'
+        # No secret token configured
+        bridge.TELEGRAM_WEBHOOK_SECRET = ''
+
+        cls.server = bridge.HTTPServer(('127.0.0.1', cls.test_port), bridge.Handler)
+        thread = Thread(target=cls.server.serve_forever, daemon=True)
+        thread.start()
+        sleep(0.5)  # Give server time to start
+
+    @classmethod
+    def tearDownClass(cls):
+        """Shutdown test server."""
+        if hasattr(cls, 'server'):
+            cls.server.shutdown()
+
+    def test_request_without_secret_when_not_configured(self):
+        """Test POST request without secret token succeeds when secret is not configured."""
+        conn = HTTPConnection('127.0.0.1', self.test_port)
+        headers = {'Content-Type': 'application/json'}
+        test_data = {'update_id': 1}
+        conn.request('POST', '/test_webhook_path_no_secret', body=json.dumps(test_data).encode(), headers=headers)
+        response = conn.getresponse()
+        self.assertEqual(response.status, 200)
+        conn.close()
+
+    def test_request_with_secret_when_not_configured(self):
+        """Test POST request with secret token succeeds when secret is not configured (backward compatibility)."""
+        conn = HTTPConnection('127.0.0.1', self.test_port)
+        headers = {
+            'Content-Type': 'application/json',
+            'X-Telegram-Bot-Api-Secret-Token': 'some_secret_token'
+        }
+        test_data = {'update_id': 1}
+        conn.request('POST', '/test_webhook_path_no_secret', body=json.dumps(test_data).encode(), headers=headers)
+        response = conn.getresponse()
+        # When no secret is configured, validation is skipped for backward compatibility
+        self.assertEqual(response.status, 200)
+        conn.close()
+
+
+class TestWebhookSecretEnvironmentVariable(unittest.TestCase):
+    """Test webhook secret environment variable configuration."""
+
+    def test_secret_from_environment_variable(self):
+        """Test that TELEGRAM_WEBHOOK_SECRET can be set via environment variable."""
+        custom_secret = 'my_custom_secret_token_xyz789'
+        os.environ['TELEGRAM_WEBHOOK_SECRET'] = custom_secret
+        import importlib
+        importlib.reload(bridge)
+
+        self.assertEqual(bridge.TELEGRAM_WEBHOOK_SECRET, custom_secret)
+        # Clean up
+        os.environ.pop('TELEGRAM_WEBHOOK_SECRET', None)
+
+    def test_default_secret_is_empty(self):
+        """Test that default secret is empty string (validation disabled)."""
+        # Ensure no env var is set
+        os.environ.pop('TELEGRAM_WEBHOOK_SECRET', None)
+        import importlib
+        importlib.reload(bridge)
+
+        self.assertEqual(bridge.TELEGRAM_WEBHOOK_SECRET, '')
+
+
+if __name__ == '__main__':
+    unittest.main()
+EOF
+[2026-01-30 10:13:37] python -m pytest tests/test_webhook_secret.py -v
+[2026-01-30 10:13:48] python -m pytest tests/ -v
+[2026-01-30 10:14:08] python -m pycodestyle bridge.py tests/test_webhook_secret.py --max-line-length=100
+[2026-01-30 10:14:14] which flake8 || which pylint || python -m compileall bridge.py tests/test_webhook_secret.py && echo "Syntax check passed"
+[2026-01-30 10:14:22] python -m py_compile bridge.py && echo "bridge.py syntax check passed"
+[2026-01-30 10:14:42] git status
+[2026-01-30 10:14:42] git diff bridge.py
+[2026-01-30 10:14:52] git log --oneline -5
+[2026-01-30 10:15:00] git add bridge.py .env.example README.md tests/test_webhook_secret.py && git commit -m "$(cat <<'EOF'
+feat: add TELEGRAM_WEBHOOK_SECRET for webhook request validation
+
+Add support for Telegram's X-Telegram-Bot-Api-Secret-Token header
+validation to verify webhook requests originate from Telegram.
+
+- Add TELEGRAM_WEBHOOK_SECRET environment variable
+- Add _validate_webhook_secret() method using constant-time comparison
+- Return 401 Unauthorized when secret validation fails
+- Maintain backward compatibility (validation skipped when not set)
+- Add comprehensive test suite with 9 test cases
+- Update documentation with setup instructions
+EOF
+)"
+[2026-01-30 10:15:13] git status
+[2026-01-30 10:16:11] ls -la /home/luandro/Dev/digidem/AI/claudecode-telegram/
+[2026-01-30 10:18:23] chmod +x /home/luandro/Dev/digidem/AI/claudecode-telegram/tests/test_webhook_management.py
+[2026-01-30 10:19:35] python -m pytest tests/test_webhook_management.py -v
+[2026-01-30 10:20:38] python -m pytest tests/test_webhook_management.py -v
+[2026-01-30 10:20:47] python -m pytest tests/ -v
+[2026-01-30 10:21:15] python -m ruff check bridge.py tests/test_webhook_management.py
+[2026-01-30 10:21:21] ruff check bridge.py tests/test_webhook_management.py
+[2026-01-30 10:21:28] python -m flake8 bridge.py tests/test_webhook_management.py --max-line-length=120 || true
+[2026-01-30 10:21:35] python -m py_compile bridge.py tests/test_webhook_management.py && echo "Syntax OK"
+[2026-01-30 10:21:46] python bridge.py --help
+[2026-01-30 10:21:53] python bridge.py set-webhook --help
+[2026-01-30 10:22:06] git status
+[2026-01-30 10:22:12] git diff bridge.py
+[2026-01-30 10:22:19] git log --oneline -5
+[2026-01-30 10:22:28] git add bridge.py .env.example README.md tests/test_webhook_management.py && git commit -m "$(cat <<'EOF'
+feat: add CLI commands for webhook management
+
+Add set-webhook, get-webhook-info, and delete-webhook commands to
+simplify Telegram webhook configuration. Automatically uses
+WEBHOOK_PATH and TELEGRAM_WEBHOOK_SECRET from environment.
+
+- Add set_webhook(), get_webhook_info(), delete_webhook() functions
+- Add argparse CLI with subcommands for webhook management
+- Add WEBHOOK_DOMAIN environment variable for default domain
+- Add comprehensive test suite (16 tests, all passing)
+- Update README with new CLI usage examples
+EOF
+)"
+[2026-01-30 10:25:17] python -m pytest tests/test_webhook_management.py -v
+[2026-01-30 10:25:27] python -m ruff check bridge.py tests/test_webhook_management.py
+[2026-01-30 10:25:37] python -m pylint --version 2>/dev/null || echo "pylint not found"; which flake8 2>/dev/null || echo "flake8 not found"; python -m black --version 2>/dev/null || echo "black not found"
+[2026-01-30 10:26:48] ls -la .venv/bin/ | grep -E "(ruff|black|flake8|pylint|mypy)" || echo "No linters found in .venv"
+[2026-01-30 10:27:08] ls -la .github 2>/dev/null || echo "No .github directory"; cat .pre-commit-config.yaml 2>/dev/null || echo "No pre-commit config"
+[2026-01-30 10:27:13] python -m py_compile bridge.py tests/test_webhook_management.py && echo "Syntax check passed"
+[2026-01-30 10:27:28] git status && git diff bridge.py
+[2026-01-30 10:27:36] git diff tests/test_webhook_management.py | head -100
+[2026-01-30 10:27:47] git add bridge.py tests/test_webhook_management.py && git commit -m "$(cat <<'EOF'
+feat: add verify-webhook command to check webhook status
+
+Add verify_webhook() function and verify-webhook CLI command that:
+- Checks if webhook URL is properly configured
+- Reports OK status with webhook URL when healthy
+- Warns about pending updates that may indicate delivery issues
+- Warns about recent errors (within last hour)
+- Returns appropriate exit codes (0 for OK, 1 for failure)
+
+This addresses the PRD item: "Verify getWebhookInfo reports OK"
+
+Tests added for:
+- OK status with properly configured webhook
+- Failure when webhook URL is not set
+- Warning for pending updates
+- Warning for recent errors
+- No warning for old errors
+- API failure handling (no response, error response)
+- CLI command parsing
+
+Co-authored-by: Claude <claude@anthropic.com>
+EOF
+)"
+[2026-01-30 10:28:12] git log --oneline -1
+[2026-01-30 10:30:27] python -m pytest tests/test_allowed_user_ids.py -v 2>&1 | head -100
+[2026-01-30 10:30:54] python -m pytest tests/test_allowed_user_ids.py -v 2>&1 | tail -30
+[2026-01-30 10:31:17] python -m flake8 bridge.py tests/test_allowed_user_ids.py --max-line-length=120 2>&1
+[2026-01-30 10:31:24] which pylint ruff mypy pycodestyle 2>&1 | head -10
+[2026-01-30 10:31:32] python -m py_compile bridge.py tests/test_allowed_user_ids.py && echo "Syntax check passed"
+[2026-01-30 10:31:48] grep -n "ALLOWED_TELEGRAM_USER_IDS\|_is_user_allowed" bridge.py | head -20
+[2026-01-30 10:32:01] python -m pytest tests/ -v 2>&1 | tail -50
+[2026-01-30 10:32:25] git status
+[2026-01-30 10:32:25] git diff bridge.py
+[2026-01-30 10:32:45] git log --oneline -5
+[2026-01-30 10:32:56] git add bridge.py tests/test_allowed_user_ids.py && git commit -m "$(cat <<'EOF'
+feat: add ALLOWED_TELEGRAM_USER_IDS for user access control
+
+Add ALLOWED_TELEGRAM_USER_IDS environment variable to restrict which
+Telegram users can interact with the bot. If empty (default), all users
+are allowed for backward compatibility.
+
+- Parse comma-separated list of user IDs from environment variable
+- Add _is_user_allowed() method to Handler class for validation
+- Check user permission in handle_message() and handle_callback()
+- Add comprehensive test suite with 14 tests
+EOF
+)"
+[2026-01-30 10:34:46] python -m pytest tests/test_allowed_user_ids.py -v 2>&1 | head -80
+[2026-01-30 10:35:00] python3 -c "
+import os
+os.environ['ALLOWED_TELEGRAM_USER_IDS'] = '123456789, 987654321 , 555555555'
+import bridge
+print('Parsed IDs:', bridge.ALLOWED_TELEGRAM_USER_IDS)
+print('Type of elements:', [type(x) for x in bridge.ALLOWED_TELEGRAM_USER_IDS])
+"
+[2026-01-30 10:35:09] python3 -c "
+import os
+os.environ['ALLOWED_TELEGRAM_USER_IDS'] = ''
+import bridge
+print('Empty string result:', bridge.ALLOWED_TELEGRAM_USER_IDS)
+"
+[2026-01-30 10:35:16] python3 -c "
+import os
+os.environ.pop('ALLOWED_TELEGRAM_USER_IDS', None)
+import bridge
+print('Not set result:', bridge.ALLOWED_TELEGRAM_USER_IDS)
+"
+[2026-01-30 10:35:31] python -m ruff check bridge.py 2>&1 || echo "Ruff not installed, trying with pylint..."
+[2026-01-30 10:35:39] python -m pylint bridge.py --disable=all --enable=E 2>&1 || echo "pylint issues found or not installed"
+[2026-01-30 10:35:48] python -m py_compile bridge.py && echo "Syntax check passed"
+[2026-01-30 10:38:19] python -m pytest tests/test_dm_allowed_user_id.py -v
+[2026-01-30 10:38:55] ruff check bridge.py tests/test_dm_allowed_user_id.py
+[2026-01-30 10:39:00] python -m ruff check bridge.py tests/test_dm_allowed_user_id.py
+[2026-01-30 10:39:11] which flake8 2>/dev/null || which pylint 2>/dev/null || echo "No linter found"
+[2026-01-30 10:39:18] python -m compileall bridge.py tests/test_dm_allowed_user_id.py && echo "Syntax check passed"
+[2026-01-30 10:39:37] git status
+[2026-01-30 10:39:37] git diff bridge.py
+[2026-01-30 10:39:37] git log --oneline -5
+[2026-01-30 10:39:45] git add bridge.py tests/test_dm_allowed_user_id.py && git commit -m "$(cat <<'EOF'
+feat: add DM_ALLOWED_USER_ID for DM-only access control
+
+Add DM_ALLOWED_USER_ID environment variable to restrict direct message
+(DM) updates to a single allowed user ID. Non-DM chats (groups/channels)
+continue to use the existing ALLOWED_TELEGRAM_USER_IDS for access control.
+
+When DM_ALLOWED_USER_ID is set (e.g., "244055394"), only that user can
+interact via private messages. If not set or empty (0), all DMs are blocked.
+
+This allows the bot to be used in public groups/channels while restricting
+private messages to a specific admin user.
+
+Changes:
+- Add DM_ALLOWED_USER_ID environment variable (default: 0, block all DMs)
+- Update _is_user_allowed() to accept chat_type parameter
+- DM (private chat) requires DM_ALLOWED_USER_ID match
+- Non-DM chats use ALLOWED_TELEGRAM_USER_IDS (unchanged behavior)
+- Add _is_private_chat() helper method
+- Update handle_callback() and handle_message() to pass chat_type
+EOF
+)"
+[2026-01-30 10:42:53] python -m pytest tests/test_allowed_user_ids.py tests/test_dm_allowed_user_id.py -v 2>&1 | head -150
+[2026-01-30 10:43:19] python -m pytest tests/ -v 2>&1 | tail -30
+[2026-01-30 10:43:41] python -m ruff check bridge.py tests/test_allowed_user_ids.py tests/test_dm_allowed_user_id.py 2>&1
+[2026-01-30 10:43:50] which ruff 2>/dev/null || echo "ruff not found"; pycodestyle --version 2>/dev/null || echo "pycodestyle not found"
+[2026-01-30 10:44:10] ls -la | grep -E "flake8|black|mypy|ruff|lint"; cat pyproject.toml 2>/dev/null | grep -A5 -E "lint|format|check"
+[2026-01-30 10:44:18] git diff --stat
+[2026-01-30 10:44:29] git status
+[2026-01-30 10:44:46] git add bridge.py tests/test_allowed_user_ids.py tests/test_dm_allowed_user_id.py && git commit -m "$(cat <<'EOF'
+feat: silently ignore unauthorized users (200 OK, no action)
+
+- Remove "not authorized" reply messages for blocked users
+- Return 200 OK without any action for unauthorized access
+- Update tests to verify silent ignore behavior
+- Maintain security: still check user permissions before processing
+
+For callback queries, answerCallbackQuery is still called (required by
+Telegram API) but no error message is sent to the user.
+
+This change makes unauthorized access attempts indistinguishable from
+valid requests to potential attackers, improving security through
+obscurity.
+EOF
+)"
+[2026-01-30 10:46:20] python3 -m py_compile bridge.py && echo "Syntax: OK"
+[2026-01-30 10:46:37] git add -A && git status
