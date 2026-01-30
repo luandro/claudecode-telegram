@@ -345,8 +345,8 @@ class Handler(BaseHTTPRequestHandler):
         telegram_api("answerCallbackQuery", {"callback_query_id": cb.get("id")})
 
         # Check if user is allowed (pass chat_type for DM vs non-DM handling)
+        # Silently ignore unauthorized users (return 200 OK, no action)
         if user_id and not self._is_user_allowed(user_id, chat_type):
-            self.reply(chat_id, "You are not authorized to use this bot")
             return
 
         if not tmux_exists():
@@ -384,8 +384,8 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         # Check if user is allowed (pass chat_type for DM vs non-DM handling)
+        # Silently ignore unauthorized users (return 200 OK, no action)
         if user_id and not self._is_user_allowed(user_id, chat_type):
-            self.reply(chat_id, "You are not authorized to use this bot")
             return
 
         with open(CHAT_ID_FILE, "w") as f:

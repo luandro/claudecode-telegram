@@ -93,7 +93,7 @@ class TestAllowedUserIdsWithRestriction(unittest.TestCase):
         conn.close()
 
     def test_blocked_user_cannot_send_message(self):
-        """Test that blocked user receives authorization error."""
+        """Test that blocked user is silently ignored (200 OK, no action)."""
         conn = HTTPConnection('127.0.0.1', self.test_port)
         headers = {'Content-Type': 'application/json'}
 
@@ -107,21 +107,20 @@ class TestAllowedUserIdsWithRestriction(unittest.TestCase):
             }
         }
 
+        # Reset mock before the request
+        bridge.telegram_api.reset_mock()
+
         conn.request('POST', '/test_webhook_user_auth', body=json.dumps(test_data).encode(), headers=headers)
         response = conn.getresponse()
-        self.assertEqual(response.status, 200)  # Server still responds, but message was rejected
+        self.assertEqual(response.status, 200)  # Server responds 200 OK
 
-        # Verify telegram_api was called with unauthorized message
-        bridge.telegram_api.assert_called()
+        # Verify NO telegram_api call was made (silent ignore, no message sent)
+        # Only answerCallbackQuery might be called for callback queries, but not for messages
         calls = bridge.telegram_api.call_args_list
-        # Check that sendMessage was called with authorization error
-        auth_error_found = False
+        # Check that sendMessage was NOT called
         for call in calls:
             if call[0][0] == 'sendMessage':
-                if 'not authorized' in call[0][1]['text'].lower():
-                    auth_error_found = True
-                    break
-        self.assertTrue(auth_error_found, "Expected authorization error message")
+                self.fail(f"sendMessage should not be called for blocked users, but was called with: {call[0][1]}")
         conn.close()
 
     def test_second_allowed_user_can_send_message(self):
@@ -255,7 +254,7 @@ class TestAllowedUserIdsCallback(unittest.TestCase):
         conn.close()
 
     def test_blocked_user_cannot_trigger_callback(self):
-        """Test that blocked user receives authorization error on callback."""
+        """Test that blocked user callback is silently ignored (200 OK, no action)."""
         conn = HTTPConnection('127.0.0.1', self.test_port)
         headers = {'Content-Type': 'application/json'}
 
@@ -269,21 +268,23 @@ class TestAllowedUserIdsCallback(unittest.TestCase):
             }
         }
 
+        # Reset mock before the request
+        bridge.telegram_api.reset_mock()
+
         conn.request('POST', '/test_webhook_callback_auth', body=json.dumps(test_data).encode(), headers=headers)
         response = conn.getresponse()
-        self.assertEqual(response.status, 200)  # Server still responds
+        self.assertEqual(response.status, 200)  # Server responds 200 OK
 
-        # Verify telegram_api was called with authorization error
-        bridge.telegram_api.assert_called()
+        # Verify answerCallbackQuery was called (required by Telegram)
+        # But NO other telegram_api calls were made (silent ignore, no error message)
         calls = bridge.telegram_api.call_args_list
-        # Check that sendMessage was called with authorization error
-        auth_error_found = False
+        # Only answerCallbackQuery should be called, no sendMessage
         for call in calls:
             if call[0][0] == 'sendMessage':
-                if 'not authorized' in call[0][1]['text'].lower():
-                    auth_error_found = True
-                    break
-        self.assertTrue(auth_error_found, "Expected authorization error message")
+                self.fail(f"sendMessage should not be called for blocked users, but was called with: {call[0][1]}")
+        # answerCallbackQuery should have been called (required by Telegram API)
+        callback_answered = any(call[0][0] == 'answerCallbackQuery' for call in calls)
+        self.assertTrue(callback_answered, "answerCallbackQuery should be called even for blocked users")
         conn.close()
 
 
