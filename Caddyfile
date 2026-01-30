@@ -1,3 +1,8 @@
+# Explicit HTTP to HTTPS redirect
+http://coder.luandro.com {
+    redir https://coder.luandro.com{uri} permanent
+}
+
 coder.luandro.com {
     # Reverse proxy to bridge service
     reverse_proxy bridge:8080
