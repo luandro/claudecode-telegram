@@ -100,13 +100,29 @@ Tunnel exposes local bridge to the internet so Telegram can reach it.
 cloudflared tunnel --url http://localhost:8080
 ```
 
-### 6. Set webhook
+### 6. (Optional but Recommended) Set webhook secret token
 
-Tells Telegram where to send message updates. Include the webhook path shown when starting the bridge.
+Generate a secure secret token to validate requests are from Telegram:
+
+```bash
+# Generate a secure random token
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+Set the `TELEGRAM_WEBHOOK_SECRET` environment variable with the generated token:
+
+```bash
+export TELEGRAM_WEBHOOK_SECRET="<generated_token>"
+```
+
+### 7. Set webhook
+
+Tells Telegram where to send message updates. Include the webhook path shown when starting the bridge. If you set a secret token, include it in the webhook URL.
 
 ```bash
 # Replace <WEBHOOK_PATH> with the path shown in bridge output (e.g., /abc123...)
-curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://YOUR-TUNNEL-URL.trycloudflare.com/<WEBHOOK_PATH>"
+# Replace <SECRET_TOKEN> with your TELEGRAM_WEBHOOK_SECRET if configured
+curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://YOUR-TUNNEL-URL.trycloudflare.com/<WEBHOOK_PATH>&secret_token=<SECRET_TOKEN>"
 ```
 
 ## Bot Commands
@@ -122,13 +138,15 @@ curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://Y
 
 ## Environment Variables
 
-| Variable                  | Default        | Description                                                                   |
-| ------------------------- | -------------- | ----------------------------------------------------------------------------- |
-| `TELEGRAM_BOT_TOKEN`      | required       | Bot token from BotFather                                                      |
-| `TMUX_SESSION`            | `claude`       | tmux session name                                                             |
-| `PORT`                    | `8080`         | Bridge port                                                                   |
-| `WEBHOOK_PATH`            | auto-generated | Random webhook path (64-char hex string) for security                         |
-| `TELEGRAM_REACTION_EMOJI` | ``             | Emoji to react to messages (set to "none", "false", "0", or empty to disable) |
+| Variable                   | Default        | Description                                                                      |
+| -------------------------- | -------------- | -------------------------------------------------------------------------------- |
+| `TELEGRAM_BOT_TOKEN`       | required       | Bot token from BotFather                                                         |
+| `TELEGRAM_WEBHOOK_SECRET`  | empty          | Secret token to validate webhook requests from Telegram (strongly recommended)   |
+| `TMUX_SESSION`             | `claude`       | tmux session name                                                                |
+| `PORT`                     | `8080`         | Bridge port                                                                      |
+| `HOST`                     | `127.0.0.1`    | Bridge host (defaults to localhost-only for security)                            |
+| `WEBHOOK_PATH`             | auto-generated | Random webhook path (64-char hex string) for security                            |
+| `TELEGRAM_REACTION_EMOJI`  | ``             | Emoji to react to messages (set to "none", "false", "0", or empty to disable)    |
 
 ### Quick Setup with .env
 
@@ -137,7 +155,7 @@ curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://Y
 cp .env.example .env
 
 # Edit with your values
-nano .env  # Add your TELEGRAM_BOT_TOKEN
+nano .env  # Add your TELEGRAM_BOT_TOKEN and optionally TELEGRAM_WEBHOOK_SECRET
 
 # Source the file before running the bridge
 source .env

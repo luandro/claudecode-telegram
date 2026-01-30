@@ -21,6 +21,9 @@ PORT = int(os.environ.get("PORT", "8080"))
 HOST = os.environ.get("HOST", "127.0.0.1")
 # Generate a long random webhook path for security (32 bytes = 64 hex chars)
 WEBHOOK_PATH = os.environ.get("WEBHOOK_PATH", secrets.token_hex(32))
+# Secret token to validate requests are from Telegram (optional but recommended)
+# Set this in Telegram Bot API when setting webhook: ?secret_token=<YOUR_SECRET>
+TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
 
 # Configure reaction emoji with validation
 _REACTION_EMOJI_RAW = os.environ.get("TELEGRAM_REACTION_EMOJI", "\U0001f44d")  # Default: 👍 (thumbs up)
@@ -148,12 +151,30 @@ class Handler(BaseHTTPRequestHandler):
         webhook_path = "/" + WEBHOOK_PATH.lstrip("/")
         return request_path == webhook_path
 
+    def _validate_webhook_secret(self):
+        """Check if the X-Telegram-Bot-Api-Secret-Token header matches the secret."""
+        if not TELEGRAM_WEBHOOK_SECRET:
+            # If no secret is configured, skip validation (not recommended but allowed)
+            return True
+        # Get the secret token header from Telegram
+        secret_token = self.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+        # Use constant-time comparison to prevent timing attacks
+        return secrets.compare_digest(secret_token, TELEGRAM_WEBHOOK_SECRET)
+
     def do_POST(self):
         # Validate webhook path for security
         if not self._validate_webhook_path():
             self.send_response(404)
             self.end_headers()
             self.wfile.write(b"Not Found")
+            return
+
+        # Validate webhook secret token if configured
+        if not self._validate_webhook_secret():
+            print(f"[AUTH_FAILED] Invalid secret token from {self.client_address[0]}")
+            self.send_response(401)
+            self.end_headers()
+            self.wfile.write(b"Unauthorized")
             return
 
         body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
