@@ -177,6 +177,143 @@ class TestDeleteWebhook(unittest.TestCase):
         self.assertIn("Failed to delete webhook", output)
 
 
+class TestVerifyWebhook(unittest.TestCase):
+    """Test verify_webhook function."""
+
+    @patch('bridge.telegram_api')
+    def test_verify_webhook_ok(self, mock_api):
+        """Test verify_webhook reports OK for properly configured webhook."""
+        mock_api.return_value = {
+            "ok": True,
+            "result": {
+                "url": "https://coder.luandro.com/test_webhook_path_abc",
+                "has_custom_certificate": False,
+                "pending_update_count": 0
+            }
+        }
+
+        with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
+            result = bridge.verify_webhook()
+
+        self.assertTrue(result)
+        output = mock_stdout.getvalue()
+        self.assertIn("Webhook OK", output)
+        self.assertIn("https://coder.luandro.com/test_webhook_path_abc", output)
+
+    @patch('bridge.telegram_api')
+    def test_verify_webhook_no_url(self, mock_api):
+        """Test verify_webhook fails when webhook URL is not set."""
+        mock_api.return_value = {
+            "ok": True,
+            "result": {
+                "url": "",
+                "has_custom_certificate": False,
+                "pending_update_count": 0
+            }
+        }
+
+        with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
+            result = bridge.verify_webhook()
+
+        self.assertFalse(result)
+        output = mock_stdout.getvalue()
+        self.assertIn("Webhook not configured", output)
+
+    @patch('bridge.telegram_api')
+    def test_verify_webhook_pending_updates(self, mock_api):
+        """Test verify_webhook warns about pending updates."""
+        mock_api.return_value = {
+            "ok": True,
+            "result": {
+                "url": "https://coder.luandro.com/test_webhook_path_abc",
+                "has_custom_certificate": False,
+                "pending_update_count": 5
+            }
+        }
+
+        with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
+            result = bridge.verify_webhook()
+
+        self.assertTrue(result)  # Still returns True
+        output = mock_stdout.getvalue()
+        self.assertIn("Warning: 5 pending updates", output)
+        self.assertIn("Webhook OK", output)
+
+    @patch('bridge.telegram_api')
+    def test_verify_webhook_recent_error(self, mock_api):
+        """Test verify_webhook warns about recent errors."""
+        import time
+        recent_timestamp = int(time.time()) - 300  # 5 minutes ago
+
+        mock_api.return_value = {
+            "ok": True,
+            "result": {
+                "url": "https://coder.luandro.com/test_webhook_path_abc",
+                "has_custom_certificate": False,
+                "pending_update_count": 0,
+                "last_error_date": recent_timestamp
+            }
+        }
+
+        with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
+            result = bridge.verify_webhook()
+
+        self.assertTrue(result)  # Still returns True
+        output = mock_stdout.getvalue()
+        self.assertIn("Warning: Recent webhook error", output)
+
+    @patch('bridge.telegram_api')
+    def test_verify_webhook_old_error(self, mock_api):
+        """Test verify_webhook ignores old errors."""
+        import time
+        old_timestamp = int(time.time()) - 7200  # 2 hours ago
+
+        mock_api.return_value = {
+            "ok": True,
+            "result": {
+                "url": "https://coder.luandro.com/test_webhook_path_abc",
+                "has_custom_certificate": False,
+                "pending_update_count": 0,
+                "last_error_date": old_timestamp
+            }
+        }
+
+        with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
+            result = bridge.verify_webhook()
+
+        self.assertTrue(result)
+        output = mock_stdout.getvalue()
+        self.assertNotIn("Warning: Recent webhook error", output)
+        self.assertIn("Webhook OK", output)
+
+    @patch('bridge.telegram_api')
+    def test_verify_webhook_no_response(self, mock_api):
+        """Test verify_webhook handles no API response."""
+        mock_api.return_value = None
+
+        with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
+            result = bridge.verify_webhook()
+
+        self.assertFalse(result)
+        output = mock_stdout.getvalue()
+        self.assertIn("Failed to get webhook info", output)
+
+    @patch('bridge.telegram_api')
+    def test_verify_webhook_api_error(self, mock_api):
+        """Test verify_webhook handles API error response."""
+        mock_api.return_value = {
+            "ok": False,
+            "description": "Unauthorized"
+        }
+
+        with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
+            result = bridge.verify_webhook()
+
+        self.assertFalse(result)
+        output = mock_stdout.getvalue()
+        self.assertIn("Failed to get webhook info", output)
+
+
 class TestCLIArgumentParsing(unittest.TestCase):
     """Test CLI argument parsing."""
 
@@ -254,6 +391,41 @@ class TestCLIArgumentParsing(unittest.TestCase):
         self.assertEqual(result, 0)
         output = mock_stdout.getvalue()
         self.assertIn("https://example.com/webhook", output)
+
+    @patch('bridge.telegram_api')
+    def test_verify_webhook_command(self, mock_api):
+        """Test verify-webhook command."""
+        mock_api.return_value = {
+            "ok": True,
+            "result": {
+                "url": "https://example.com/webhook",
+                "pending_update_count": 0
+            }
+        }
+
+        with patch('sys.argv', ['bridge.py', 'verify-webhook']):
+            with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
+                result = bridge.main()
+
+        self.assertEqual(result, 0)
+        output = mock_stdout.getvalue()
+        self.assertIn("Webhook OK", output)
+
+    @patch('bridge.telegram_api')
+    def test_verify_webhook_command_failure(self, mock_api):
+        """Test verify-webhook command with webhook not configured."""
+        mock_api.return_value = {
+            "ok": True,
+            "result": {"url": "", "pending_update_count": 0}
+        }
+
+        with patch('sys.argv', ['bridge.py', 'verify-webhook']):
+            with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
+                result = bridge.main()
+
+        self.assertEqual(result, 1)
+        output = mock_stdout.getvalue()
+        self.assertIn("Webhook not configured", output)
 
     @patch('bridge.telegram_api')
     def test_delete_webhook_command(self, mock_api):

@@ -131,6 +131,43 @@ def delete_webhook() -> bool:
     return False
 
 
+def verify_webhook() -> bool:
+    """Verify that the webhook is properly configured and reports OK status."""
+    result = telegram_api("getWebhookInfo", {})
+    if not result:
+        print("Failed to get webhook info: No response from Telegram API")
+        return False
+
+    if not result.get("ok"):
+        error_desc = result.get("description", "Unknown error")
+        print(f"Failed to get webhook info: {error_desc}")
+        return False
+
+    info = result.get("result", {})
+    url = info.get("url", "")
+    pending_count = info.get("pending_update_count", 0)
+    last_error = info.get("last_error_date", 0)
+
+    # Check if webhook URL is set
+    if not url:
+        print("Webhook not configured: No URL set")
+        return False
+
+    # Check for pending updates (may indicate delivery issues)
+    if pending_count > 0:
+        print(f"Warning: {pending_count} pending updates")
+
+    # Check for recent errors
+    if last_error:
+        import time
+        error_age = int(time.time()) - last_error
+        if error_age < 3600:  # Error in the last hour
+            print(f"Warning: Recent webhook error ({error_age} seconds ago)")
+
+    print(f"Webhook OK: {url}")
+    return True
+
+
 def send_typing_loop(chat_id):
     while os.path.exists(PENDING_FILE):
         telegram_api("sendChatAction", {"chat_id": chat_id, "action": "typing"})
@@ -411,6 +448,9 @@ def main():
     # Get webhook info command
     subparsers.add_parser("get-webhook-info", help="Get current webhook info")
 
+    # Verify webhook command
+    subparsers.add_parser("verify-webhook", help="Verify webhook is properly configured")
+
     # Delete webhook command
     subparsers.add_parser("delete-webhook", help="Delete webhook")
 
@@ -428,6 +468,8 @@ def main():
         info = get_webhook_info()
         print(json.dumps(info, indent=2))
         return 0
+    elif args.command == "verify-webhook":
+        return 0 if verify_webhook() else 1
     elif args.command == "delete-webhook":
         return 0 if delete_webhook() else 1
     else:
