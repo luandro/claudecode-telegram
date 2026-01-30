@@ -15,8 +15,7 @@ services:
       - ${TMUX_SOCKET:-/tmp/tmux-1000/default}:/tmux-socket:ro
       # Mount Claude config directory for chat_id, pending file, and history
       - ${CLAUDE_DIR:-${HOME}/.claude}:/claude:rw
-    ports:
-      - "${PORT:-8080}:8080"
+    # No ports exposed - only accessible via Caddy reverse proxy on internal network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080"]
       interval: 30s
