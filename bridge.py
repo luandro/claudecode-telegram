@@ -16,6 +16,8 @@ PENDING_FILE = os.path.expanduser("~/.claude/telegram_pending")
 HISTORY_FILE = os.path.expanduser("~/.claude/history.jsonl")
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 PORT = int(os.environ.get("PORT", "8080"))
+# Default to localhost-only for security. Use 0.0.0.0 to bind all interfaces.
+HOST = os.environ.get("HOST", "127.0.0.1")
 
 # Configure reaction emoji with validation
 _REACTION_EMOJI_RAW = os.environ.get("TELEGRAM_REACTION_EMOJI", "\U0001f44d")  # Default: 👍 (thumbs up)
@@ -307,9 +309,9 @@ def main():
         print("Error: TELEGRAM_BOT_TOKEN not set")
         return
     setup_bot_commands()
-    print(f"Bridge on :{PORT} | tmux: {TMUX_SESSION}")
+    print(f"Bridge on {HOST}:{PORT} | tmux: {TMUX_SESSION}")
     try:
-        HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+        HTTPServer((HOST, PORT), Handler).serve_forever()
     except KeyboardInterrupt:
         print("\nStopped")
 
