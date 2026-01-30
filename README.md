@@ -89,6 +89,7 @@ Bridge receives Telegram webhooks and injects messages into Claude Code.
 ```bash
 export TELEGRAM_BOT_TOKEN="your_token"
 python bridge.py
+# Note the webhook path shown in output (e.g., /<64-char-random-string>)
 ```
 
 ### 5. Expose via Cloudflare Tunnel
@@ -101,10 +102,11 @@ cloudflared tunnel --url http://localhost:8080
 
 ### 6. Set webhook
 
-Tells Telegram where to send message updates.
+Tells Telegram where to send message updates. Include the webhook path shown when starting the bridge.
 
 ```bash
-curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://YOUR-TUNNEL-URL.trycloudflare.com"
+# Replace <WEBHOOK_PATH> with the path shown in bridge output (e.g., /abc123...)
+curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://YOUR-TUNNEL-URL.trycloudflare.com/<WEBHOOK_PATH>"
 ```
 
 ## Bot Commands
@@ -120,12 +122,13 @@ curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://Y
 
 ## Environment Variables
 
-| Variable                  | Default  | Description                                                                   |
-| ------------------------- | -------- | ----------------------------------------------------------------------------- |
-| `TELEGRAM_BOT_TOKEN`      | required | Bot token from BotFather                                                      |
-| `TMUX_SESSION`            | `claude` | tmux session name                                                             |
-| `PORT`                    | `8080`   | Bridge port                                                                   |
-| `TELEGRAM_REACTION_EMOJI` | ``       | Emoji to react to messages (set to "none", "false", "0", or empty to disable) |
+| Variable                  | Default        | Description                                                                   |
+| ------------------------- | -------------- | ----------------------------------------------------------------------------- |
+| `TELEGRAM_BOT_TOKEN`      | required       | Bot token from BotFather                                                      |
+| `TMUX_SESSION`            | `claude`       | tmux session name                                                             |
+| `PORT`                    | `8080`         | Bridge port                                                                   |
+| `WEBHOOK_PATH`            | auto-generated | Random webhook path (64-char hex string) for security                         |
+| `TELEGRAM_REACTION_EMOJI` | ``             | Emoji to react to messages (set to "none", "false", "0", or empty to disable) |
 
 ### Quick Setup with .env
 

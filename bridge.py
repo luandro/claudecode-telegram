@@ -3,6 +3,7 @@
 
 import os
 import json
+import secrets
 import subprocess
 import threading
 import time
@@ -18,6 +19,8 @@ BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 PORT = int(os.environ.get("PORT", "8080"))
 # Default to localhost-only for security. Use 0.0.0.0 to bind all interfaces.
 HOST = os.environ.get("HOST", "127.0.0.1")
+# Generate a long random webhook path for security (32 bytes = 64 hex chars)
+WEBHOOK_PATH = os.environ.get("WEBHOOK_PATH", secrets.token_hex(32))
 
 # Configure reaction emoji with validation
 _REACTION_EMOJI_RAW = os.environ.get("TELEGRAM_REACTION_EMOJI", "\U0001f44d")  # Default: 👍 (thumbs up)
@@ -138,7 +141,21 @@ def get_session_id(project_path):
 
 
 class Handler(BaseHTTPRequestHandler):
+    def _validate_webhook_path(self):
+        """Check if the request path matches the webhook path."""
+        # Normalize paths: ensure leading slash for comparison
+        request_path = "/" + self.path.lstrip("/")
+        webhook_path = "/" + WEBHOOK_PATH.lstrip("/")
+        return request_path == webhook_path
+
     def do_POST(self):
+        # Validate webhook path for security
+        if not self._validate_webhook_path():
+            self.send_response(404)
+            self.end_headers()
+            self.wfile.write(b"Not Found")
+            return
+
         body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
         try:
             update = json.loads(body)
@@ -153,6 +170,13 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(b"OK")
 
     def do_GET(self):
+        # Validate webhook path for security
+        if not self._validate_webhook_path():
+            self.send_response(404)
+            self.end_headers()
+            self.wfile.write(b"Not Found")
+            return
+
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"Claude-Telegram Bridge")
@@ -309,7 +333,7 @@ def main():
         print("Error: TELEGRAM_BOT_TOKEN not set")
         return
     setup_bot_commands()
-    print(f"Bridge on {HOST}:{PORT} | tmux: {TMUX_SESSION}")
+    print(f"Bridge on {HOST}:{PORT}/{WEBHOOK_PATH} | tmux: {TMUX_SESSION}")
     try:
         HTTPServer((HOST, PORT), Handler).serve_forever()
     except KeyboardInterrupt:
