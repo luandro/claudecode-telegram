@@ -26,6 +26,7 @@ WEBHOOK_PATH = os.environ.get("WEBHOOK_PATH", secrets.token_hex(32))
 TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
 # Comma-separated list of allowed Telegram user IDs. If empty, all users are allowed.
 # Get your user ID from @userinfobot on Telegram. Example: "123456789,987654321"
+# This applies to non-DM chats (groups/channels). DMs are restricted to DM_ALLOWED_USER_ID.
 ALLOWED_TELEGRAM_USER_IDS = set()
 _allowed_ids = os.environ.get("ALLOWED_TELEGRAM_USER_IDS", "").strip()
 if _allowed_ids:
@@ -33,6 +34,17 @@ if _allowed_ids:
         ALLOWED_TELEGRAM_USER_IDS = set(int(uid.strip()) for uid in _allowed_ids.split(",") if uid.strip())
     except ValueError:
         print(f"Warning: Invalid ALLOWED_TELEGRAM_USER_IDS format: {_allowed_ids}")
+
+# Single user ID allowed to send DM updates. Only this user can interact via private messages.
+# Get your user ID from @userinfobot on Telegram. Example: "123456789"
+# If empty or 0, DM updates are not allowed from anyone.
+DM_ALLOWED_USER_ID = 0
+_dm_allowed = os.environ.get("DM_ALLOWED_USER_ID", "").strip()
+if _dm_allowed:
+    try:
+        DM_ALLOWED_USER_ID = int(_dm_allowed)
+    except ValueError:
+        print(f"Warning: Invalid DM_ALLOWED_USER_ID format: {_dm_allowed}")
 
 # Configure reaction emoji with validation
 _REACTION_EMOJI_RAW = os.environ.get("TELEGRAM_REACTION_EMOJI", "\U0001f44d")  # Default: 👍 (thumbs up)
@@ -232,12 +244,39 @@ def get_session_id(project_path):
 
 
 class Handler(BaseHTTPRequestHandler):
-    def _is_user_allowed(self, user_id):
-        """Check if a user ID is allowed to interact with the bot."""
+    def _is_user_allowed(self, user_id, chat_type=None):
+        """Check if a user ID is allowed to interact with the bot.
+
+        Args:
+            user_id: The Telegram user ID to check.
+            chat_type: The chat type ('private' for DMs, 'group', 'supergroup', 'channel').
+
+        Returns:
+            True if user is allowed, False otherwise.
+        """
+        # DM (private chat) requires DM_ALLOWED_USER_ID to be set and match
+        if chat_type == "private":
+            if DM_ALLOWED_USER_ID == 0:
+                # No DM user configured, deny all DMs
+                return False
+            return user_id == DM_ALLOWED_USER_ID
+
+        # Non-DM chats use ALLOWED_TELEGRAM_USER_IDS
         if not ALLOWED_TELEGRAM_USER_IDS:
-            # No restriction configured
+            # No restriction configured for non-DM chats
             return True
         return user_id in ALLOWED_TELEGRAM_USER_IDS
+
+    def _is_private_chat(self, chat):
+        """Check if the chat is a private (DM) chat.
+
+        Args:
+            chat: The chat object from Telegram update.
+
+        Returns:
+            True if private chat, False otherwise.
+        """
+        return chat.get("type") == "private"
 
     def _validate_webhook_path(self):
         """Check if the request path matches the webhook path."""
@@ -298,13 +337,15 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(b"Claude-Telegram Bridge")
 
     def handle_callback(self, cb):
-        chat_id = cb.get("message", {}).get("chat", {}).get("id")
+        chat = cb.get("message", {}).get("chat", {})
+        chat_id = chat.get("id")
+        chat_type = chat.get("type")
         user_id = cb.get("from", {}).get("id")
         data = cb.get("data", "")
         telegram_api("answerCallbackQuery", {"callback_query_id": cb.get("id")})
 
-        # Check if user is allowed
-        if user_id and not self._is_user_allowed(user_id):
+        # Check if user is allowed (pass chat_type for DM vs non-DM handling)
+        if user_id and not self._is_user_allowed(user_id, chat_type):
             self.reply(chat_id, "You are not authorized to use this bot")
             return
 
@@ -335,13 +376,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_message(self, update):
         msg = update.get("message", {})
-        text, chat_id, msg_id = msg.get("text", ""), msg.get("chat", {}).get("id"), msg.get("message_id")
+        chat = msg.get("chat", {})
+        text, chat_id, msg_id = msg.get("text", ""), chat.get("id"), msg.get("message_id")
+        chat_type = chat.get("type")
         user_id = msg.get("from", {}).get("id")
         if not text or not chat_id:
             return
 
-        # Check if user is allowed
-        if user_id and not self._is_user_allowed(user_id):
+        # Check if user is allowed (pass chat_type for DM vs non-DM handling)
+        if user_id and not self._is_user_allowed(user_id, chat_type):
             self.reply(chat_id, "You are not authorized to use this bot")
             return
 
