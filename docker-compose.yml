@@ -11,6 +11,7 @@ services:
       - PORT=${PORT:-8080}
       - HOST=0.0.0.0
       - TELEGRAM_REACTION_EMOJI=${TELEGRAM_REACTION_EMOJI:-}
+      - TMUX_SOCKET_PATH=/tmux-socket
     volumes:
       # Mount tmux socket for Claude Code communication
       - ${TMUX_SOCKET:-/tmp/tmux-1000/default}:/tmux-socket:ro

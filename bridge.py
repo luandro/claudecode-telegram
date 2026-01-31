@@ -54,6 +54,9 @@ _REACTION_EMOJI_CANDIDATE = None if not _REACTION_EMOJI_STRIPPED or _REACTION_EM
 # Basic validation: emoji should be reasonable length (1-10 chars) to prevent abuse
 REACTION_EMOJI = _REACTION_EMOJI_CANDIDATE if _REACTION_EMOJI_CANDIDATE and len(_REACTION_EMOJI_CANDIDATE) <= 10 else None
 
+# Optional tmux socket path (useful when running in Docker with mounted socket)
+TMUX_SOCKET_PATH = os.environ.get("TMUX_SOCKET_PATH", "")
+
 BOT_COMMANDS = [
     {"command": "clear", "description": "Clear conversation"},
     {"command": "resume", "description": "Resume session (shows picker)"},
@@ -195,24 +198,34 @@ def send_typing_loop(chat_id):
         time.sleep(4)
 
 
+def _get_tmux_cmd(args):
+    """Construct tmux command with optional socket path."""
+    cmd = ["tmux"]
+    if TMUX_SOCKET_PATH:
+        cmd.extend(["-S", TMUX_SOCKET_PATH])
+    cmd.extend(args)
+    return cmd
+
+
 def tmux_exists():
-    return subprocess.run(["tmux", "has-session", "-t", TMUX_SESSION], capture_output=True).returncode == 0
+    cmd = _get_tmux_cmd(["has-session", "-t", TMUX_SESSION])
+    return subprocess.run(cmd, capture_output=True).returncode == 0
 
 
 def tmux_send(text, literal=True):
-    cmd = ["tmux", "send-keys", "-t", TMUX_SESSION]
+    args = ["send-keys", "-t", TMUX_SESSION]
     if literal:
-        cmd.append("-l")
-    cmd.append(text)
-    subprocess.run(cmd)
+        args.append("-l")
+    args.append(text)
+    subprocess.run(_get_tmux_cmd(args))
 
 
 def tmux_send_enter():
-    subprocess.run(["tmux", "send-keys", "-t", TMUX_SESSION, "Enter"])
+    subprocess.run(_get_tmux_cmd(["send-keys", "-t", TMUX_SESSION, "Enter"]))
 
 
 def tmux_send_escape():
-    subprocess.run(["tmux", "send-keys", "-t", TMUX_SESSION, "Escape"])
+    subprocess.run(_get_tmux_cmd(["send-keys", "-t", TMUX_SESSION, "Escape"]))
 
 
 def get_recent_sessions(limit=5):
