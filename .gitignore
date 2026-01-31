@@ -15,3 +15,4 @@ secrets.txt
 hooks/pre-commit.local
 # Keep githooks directory in version control for distribution
 # but don't track local modifications
+.claude/command-history.log

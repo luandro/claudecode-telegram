@@ -329,3 +329,60 @@ The Docker Compose setup includes:
 2. **caddy**: Reverse proxy providing HTTPS termination, security headers, and automatic SSL certificates via Let's Encrypt
 
 Both services run on an internal Docker network (`claude-telegram-net`) for isolation.
+
+## Testing
+
+The project includes tests for HTTPS connectivity and deployment verification.
+
+### Install test dependencies
+
+```bash
+# Install pytest and test dependencies
+uv pip install -e ".[test]"
+```
+
+### Run tests
+
+**Local tests** (Caddyfile config, local port checks):
+
+```bash
+# Run local tests only (no network calls)
+pytest tests/test_https_connectivity.py
+```
+
+**Deployment verification** (DNS, SSL, HTTPS connectivity):
+
+```bash
+# Run all tests including network-dependent checks
+RUN_DEPLOYMENT_CHECKS=1 pytest tests/test_https_connectivity.py -m integration
+
+# Test against a custom domain
+DEPLOYMENT_DOMAIN=your-domain.com RUN_DEPLOYMENT_CHECKS=1 pytest tests/test_https_connectivity.py -m integration
+```
+
+**Standalone execution**:
+
+```bash
+# Run as standalone script (shows detailed output)
+python tests/test_https_connectivity.py
+
+# With deployment checks enabled
+RUN_DEPLOYMENT_CHECKS=1 python tests/test_https_connectivity.py
+```
+
+### Test environment variables
+
+Test-specific variables used by `pytest tests/test_https_connectivity.py`:
+
+| Variable                | Default             | Description                                                                                            |
+| ----------------------- | ------------------- | ------------------------------------------------------------------------------------------------------ |
+| `RUN_DEPLOYMENT_CHECKS` | `0`                 | Set to `1` to enable network-dependent tests (DNS, SSL, HTTPS)                                         |
+| `DEPLOYMENT_DOMAIN`     | `coder.luandro.com` | Domain to test for HTTPS connectivity (scheme is automatically stripped if present, e.g., https://...) |
+
+### Understanding test results
+
+- **Passed** (✓): Test successfully verified the condition
+- **Skipped** (⊘): Test was skipped (expected during local development for network tests)
+- **Failed** (✗): Test found a critical issue that needs attention
+
+Network-dependent tests are skipped by default to avoid flaky CI runs. Enable them with `RUN_DEPLOYMENT_CHECKS=1` when verifying deployment readiness.

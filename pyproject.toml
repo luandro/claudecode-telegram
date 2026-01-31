@@ -5,5 +5,15 @@ description = "Telegram bridge for Claude Code"
 requires-python = ">=3.10"
 dependencies = []
 
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+]
+
 [project.scripts]
 claudecode-telegram = "bridge:main"
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests that require network connectivity (deselect with '-m \"not integration\"')",
+]
