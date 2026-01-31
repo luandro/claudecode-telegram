@@ -508,12 +508,10 @@ class Handler(BaseHTTPRequestHandler):
     def reply(self, chat_id, text):
         telegram_api("sendMessage", {"chat_id": chat_id, "text": text})
 
-    def log_message(self, *args):
-        pass
-
 
 def main():
     import argparse
+    import sys
 
     # Default webhook domain from environment or fallback
     default_domain = os.environ.get("WEBHOOK_DOMAIN", "coder.luandro.com")
@@ -542,7 +540,7 @@ def main():
 
     # Validate bot token exists for all commands
     if not BOT_TOKEN:
-        print("Error: TELEGRAM_BOT_TOKEN not set")
+        print("Error: TELEGRAM_BOT_TOKEN not set", flush=True)
         return 1
 
     # Execute command
@@ -550,7 +548,7 @@ def main():
         return 0 if set_webhook(args.domain) else 1
     elif args.command == "get-webhook-info":
         info = get_webhook_info()
-        print(json.dumps(info, indent=2))
+        print(json.dumps(info, indent=2), flush=True)
         return 0
     elif args.command == "verify-webhook":
         return 0 if verify_webhook() else 1
@@ -559,11 +557,11 @@ def main():
     else:
         # Default: run server (backward compatible)
         setup_bot_commands()
-        print(f"Bridge on {HOST}:{PORT}/{WEBHOOK_PATH} | tmux: {TMUX_SESSION}")
+        print(f"Bridge on {HOST}:{PORT}/{WEBHOOK_PATH} | tmux: {TMUX_SESSION}", flush=True)
         try:
             HTTPServer((HOST, PORT), Handler).serve_forever()
         except KeyboardInterrupt:
-            print("\nStopped")
+            print("\nStopped", flush=True)
         return 0
 
 

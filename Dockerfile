@@ -19,6 +19,9 @@ RUN pip install --no-cache-dir -e .
 # Create directory for Claude config mount
 RUN mkdir -p /claude
 
+# Ensure logs are visible
+ENV PYTHONUNBUFFERED=1
+
 # Expose port
 EXPOSE 8080
 
