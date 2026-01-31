@@ -19,7 +19,7 @@ services:
       - ${CLAUDE_DIR:-${HOME}/.claude}:/claude:rw
     # No ports exposed - only accessible via Caddy reverse proxy on internal network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3

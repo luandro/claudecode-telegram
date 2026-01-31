@@ -338,6 +338,13 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(b"OK")
 
     def do_GET(self):
+        # Health check endpoint (public, no validation needed)
+        if self.path == "/health":
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"OK")
+            return
+
         # Validate webhook path for security
         if not self._validate_webhook_path():
             self.send_response(404)
@@ -355,11 +362,15 @@ class Handler(BaseHTTPRequestHandler):
         chat_type = chat.get("type")
         user_id = cb.get("from", {}).get("id")
         data = cb.get("data", "")
+        
+        print(f"[CALLBACK] from={user_id} chat={chat_id} data={data}", flush=True)
+
         telegram_api("answerCallbackQuery", {"callback_query_id": cb.get("id")})
 
         # Check if user is allowed (pass chat_type for DM vs non-DM handling)
         # Silently ignore unauthorized users (return 200 OK, no action)
         if user_id and not self._is_user_allowed(user_id, chat_type):
+            print(f"[AUTH_FAIL] User {user_id} not allowed in {chat_type}", flush=True)
             return
 
         if not tmux_exists():
@@ -393,12 +404,16 @@ class Handler(BaseHTTPRequestHandler):
         text, chat_id, msg_id = msg.get("text", ""), chat.get("id"), msg.get("message_id")
         chat_type = chat.get("type")
         user_id = msg.get("from", {}).get("id")
+        
+        print(f"[MESSAGE] from={user_id} chat={chat_id} type={chat_type}", flush=True)
+        
         if not text or not chat_id:
             return
 
         # Check if user is allowed (pass chat_type for DM vs non-DM handling)
         # Silently ignore unauthorized users (return 200 OK, no action)
         if user_id and not self._is_user_allowed(user_id, chat_type):
+            print(f"[AUTH_FAIL] User {user_id} not allowed in {chat_type}", flush=True)
             return
 
         with open(CHAT_ID_FILE, "w") as f:
