@@ -9,6 +9,7 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TMUX_SESSION=${TMUX_SESSION:-claude}
       - PORT=${PORT:-8080}
+      - HOST=0.0.0.0
       - TELEGRAM_REACTION_EMOJI=${TELEGRAM_REACTION_EMOJI:-}
     volumes:
       # Mount tmux socket for Claude Code communication
