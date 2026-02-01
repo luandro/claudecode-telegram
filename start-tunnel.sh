@@ -13,60 +13,38 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
+# Source .env and enforce tunnel mode
+set -a
+source .env
+set +a
+
+# Enforce tunnel mode (override any .env setting)
+export DEPLOYMENT_MODE=tunnel
+
+echo "Mode: tunnel (Cloudflare quick tunnel)"
+echo ""
+
 # Start containers with tunnel profile
 docker-compose --profile tunnel up -d
 
 echo ""
-echo "Waiting for services to start..."
-sleep 5
-
-# Get the tunnel URL from cloudflared logs
+echo "Services starting... Webhook will auto-configure on startup."
+echo "The bridge service will automatically detect the tunnel URL and register the webhook."
 echo ""
-echo "Getting Cloudflare Tunnel URL..."
-TUNNEL_URL=$(docker-compose logs cloudflared 2>&1 | grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' | head -1)
-
-if [ -z "$TUNNEL_URL" ]; then
-    echo "Warning: Could not automatically detect tunnel URL"
-    echo "Check logs manually: docker-compose logs cloudflared"
-    echo ""
-    echo "Look for a line like:"
-    echo "  https://random-name.trycloudflare.com"
-else
-    echo "Tunnel URL: $TUNNEL_URL"
-    echo ""
-
-    # Wait for DNS propagation
-    echo "Waiting for DNS propagation (this can take 30-60 seconds)..."
-    DOMAIN="${TUNNEL_URL#https://}"
-
-    # Try to set webhook with retries
-    echo "Setting Telegram webhook (with retries)..."
-    for i in {1..6}; do
-        echo "Attempt $i/6..."
-        if docker-compose exec -T bridge python bridge.py set-webhook --domain "$DOMAIN" 2>&1 | grep -q "successfully"; then
-            echo "✅ Webhook set successfully!"
-            break
-        else
-            if [ $i -lt 6 ]; then
-                echo "⏳ Waiting 10 seconds for DNS propagation..."
-                sleep 10
-            else
-                echo "⚠️ Webhook setup failed after 6 attempts"
-                echo ""
-                echo "This is normal for quick tunnels. DNS propagation can take a few minutes."
-                echo "Try setting the webhook manually in 1-2 minutes:"
-                echo "  docker-compose exec bridge python bridge.py set-webhook --domain $DOMAIN"
-            fi
-        fi
-    done
-fi
+echo "This process includes automatic retries and may take up to 60 seconds."
+sleep 2
 
 echo ""
 echo "Deployment complete!"
+echo ""
+echo "Check webhook status:"
+echo "  docker-compose exec bridge python bridge.py get-webhook-info"
 echo ""
 echo "Useful commands:"
 echo "  View tunnel URL:  docker-compose logs cloudflared | grep trycloudflare.com"
 echo "  Monitor logs:     docker-compose logs -f bridge"
 echo "  Check status:     docker-compose ps"
+echo "  Health check:     docker-compose exec bridge curl -s http://localhost:8080/health"
+echo "  Verify webhook:   docker-compose exec bridge python bridge.py verify-webhook"
 echo "  Stop services:    docker-compose --profile tunnel down"
 echo ""

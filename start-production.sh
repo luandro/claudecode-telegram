@@ -13,17 +13,29 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
-# Source .env to get WEBHOOK_DOMAIN
+# Source .env to get configuration
 set -a
 source .env
 set +a
 
+# Enforce production mode (override any .env setting)
+export DEPLOYMENT_MODE=production
+
+# Validate WEBHOOK_DOMAIN is set
 if [ -z "$WEBHOOK_DOMAIN" ]; then
     echo "Error: WEBHOOK_DOMAIN not set in .env"
     echo "Please set your domain (e.g., WEBHOOK_DOMAIN=coder.luandro.com)"
     exit 1
 fi
 
+# Validate domain format (basic check)
+if ! echo "$WEBHOOK_DOMAIN" | grep -qE '^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'; then
+    echo "Error: Invalid WEBHOOK_DOMAIN format: $WEBHOOK_DOMAIN"
+    echo "Expected format: example.com or subdomain.example.com"
+    exit 1
+fi
+
+echo "Mode: production"
 echo "Domain: $WEBHOOK_DOMAIN"
 echo ""
 
@@ -54,20 +66,20 @@ fi
 docker-compose --profile production up -d
 
 echo ""
-echo "Waiting for services to start..."
-sleep 5
-
-# Set webhook
-echo ""
-echo "Setting Telegram webhook..."
-docker-compose exec -T bridge python bridge.py set-webhook --domain "$WEBHOOK_DOMAIN"
+echo "Services starting... Webhook will auto-configure on startup."
+sleep 2
 
 echo ""
 echo "Deployment complete!"
 echo ""
+echo "Check webhook status:"
+echo "  docker-compose exec bridge python bridge.py get-webhook-info"
+echo ""
 echo "Useful commands:"
 echo "  Monitor logs:     docker-compose logs -f bridge caddy"
 echo "  Check status:     docker-compose ps"
+echo "  Health check:     docker-compose exec bridge curl -s http://localhost:8080/health"
 echo "  Verify webhook:   docker-compose exec bridge python bridge.py verify-webhook"
+echo "  Manual setup:     docker-compose exec bridge python bridge.py set-webhook --domain $WEBHOOK_DOMAIN"
 echo "  Stop services:    docker-compose --profile production down"
 echo ""
