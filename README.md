@@ -13,7 +13,7 @@ Telegram bot bridge for Claude Code. Send messages from Telegram, get responses 
 - [Docker Deployment (Caddy + HTTPS)](#docker-deployment-caddy--https)
 - [Webhook Management (CLI)](#webhook-management-cli)
 - [Testing](#testing)
-- [Operational Verification](#operational-verification)
+- [Deployment Verification](#deployment-verification)
 - [Security](#security)
 - [Contributing](#contributing)
 - [License](#license)
@@ -331,13 +331,11 @@ DEPLOYMENT_DOMAIN=your-domain.com RUN_DEPLOYMENT_CHECKS=1 pytest tests/test_http
 
 Some tests require Docker or a running stack (see `tests/` for details).
 
-## Operational Verification
+## Deployment Verification
 
-Operational checks and deployment readiness are documented here:
+Production deployment verification guide:
 
-- `OPERATIONAL_VERIFICATION.md` (step-by-step checklist)
-- `deploy-verify.sh` (server-side verification script)
-- `VERIFICATION_SUMMARY.md` (status snapshot)
+- **[docs/DEPLOYMENT_VERIFICATION.md](docs/DEPLOYMENT_VERIFICATION.md)** - Quick verification checklist, troubleshooting, and deployment modes reference
 
 ## Security
 
