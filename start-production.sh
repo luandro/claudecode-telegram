@@ -6,6 +6,18 @@ set -e
 echo "Starting Claude-Telegram Bridge in production mode..."
 echo ""
 
+# Detect and use appropriate docker compose command
+docker_compose() {
+    if docker compose version &>/dev/null 2>&1; then
+        docker compose "$@"
+    elif command -v docker-compose &>/dev/null 2>&1; then
+        docker-compose "$@"
+    else
+        echo "Error: Neither 'docker compose' nor 'docker-compose' found" >&2
+        return 1
+    fi
+}
+
 # Check if .env exists
 if [ ! -f .env ]; then
     echo "Error: .env file not found"
@@ -63,7 +75,7 @@ if [ "$CADDY_HTTP_PORT" = "80" ] || [ "$CADDY_HTTPS_PORT" = "443" ]; then
 fi
 
 # Start containers with production profile
-docker-compose --profile production up -d
+docker_compose --profile production up -d
 
 echo ""
 echo "Services starting... Webhook will auto-configure on startup."
@@ -73,13 +85,13 @@ echo ""
 echo "Deployment complete!"
 echo ""
 echo "Check webhook status:"
-echo "  docker-compose exec bridge python bridge.py get-webhook-info"
+echo "  docker_compose exec bridge python bridge.py get-webhook-info"
 echo ""
 echo "Useful commands:"
-echo "  Monitor logs:     docker-compose logs -f bridge caddy"
-echo "  Check status:     docker-compose ps"
-echo "  Health check:     docker-compose exec bridge curl -s http://localhost:8080/health"
-echo "  Verify webhook:   docker-compose exec bridge python bridge.py verify-webhook"
-echo "  Manual setup:     docker-compose exec bridge python bridge.py set-webhook --domain $WEBHOOK_DOMAIN"
-echo "  Stop services:    docker-compose --profile production down"
+echo "  Monitor logs:     docker_compose logs -f bridge caddy"
+echo "  Check status:     docker_compose ps"
+echo "  Health check:     docker_compose exec bridge curl -s http://localhost:8080/health"
+echo "  Verify webhook:   docker_compose exec bridge python bridge.py verify-webhook"
+echo "  Manual setup:     docker_compose exec bridge python bridge.py set-webhook --domain $WEBHOOK_DOMAIN"
+echo "  Stop services:    docker_compose --profile production down"
 echo ""

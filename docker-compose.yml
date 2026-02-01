@@ -62,21 +62,7 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: claudecode-telegram-cloudflared
     restart: unless-stopped
-    command: >
-      sh -c '
-        set -eu
-        rm -f /claude/cloudflared_tunnel_url
-        cloudflared tunnel --no-autoupdate --url http://bridge:8080 2>&1 |
-        while IFS= read -r line; do
-          printf "%s\n" "$line"
-          case "$line" in
-            *trycloudflare.com*)
-              url=$(printf "%s" "$line" | sed -n "s/.*\\(https:\\/\\/[a-z0-9-]*\\.trycloudflare\\.com\\).*/\\1/p")
-              if [ -n "$url" ]; then printf "%s" "$url" > /claude/cloudflared_tunnel_url; fi
-              ;;
-          esac
-        done
-      '
+    command: ["tunnel", "--no-autoupdate", "--url", "http://bridge:8080"]
     networks:
       - claude-telegram-net
     volumes:

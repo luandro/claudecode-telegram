@@ -5,6 +5,15 @@ This guide covers deploying the Claude-Telegram Bridge in two modes:
 1. **Tunnel Mode** (Local Development) - Uses Cloudflare Tunnel, no public IP needed
 2. **Production Mode** (Public Server) - Direct access with Caddy reverse proxy
 
+## Docker Compose Compatibility
+
+**All commands in this guide support both:**
+
+- `docker compose` (Docker Compose V2, included with Docker Desktop)
+- `docker compose` (Docker Compose V1, standalone plugin)
+
+The scripts automatically detect which version is available. Examples use `docker compose` (V2) syntax, but `docker compose` (V1) works identically.
+
 ---
 
 ## Tunnel Mode (Recommended for Local Development)
@@ -39,10 +48,10 @@ Telegram → Cloudflare Tunnel → cloudflared (Docker) → bridge (Docker) → 
 
 ```bash
 # 1. Start containers
-docker-compose --profile tunnel up -d
+docker compose --profile tunnel up -d
 
 # 2. Get tunnel URL from logs
-docker-compose logs cloudflared | grep trycloudflare.com
+docker compose logs cloudflared | grep trycloudflare.com
 
 # Example output:
 # +--------------------------------------------------------------------------------------------+
@@ -51,10 +60,10 @@ docker-compose logs cloudflared | grep trycloudflare.com
 # +--------------------------------------------------------------------------------------------+
 
 # 3. Set webhook (replace with your tunnel URL)
-docker-compose exec bridge python bridge.py set-webhook --domain abc-def-ghi.trycloudflare.com
+docker compose exec bridge python bridge.py set-webhook --domain abc-def-ghi.trycloudflare.com
 
 # 4. Verify
-docker-compose exec bridge python bridge.py verify-webhook
+docker compose exec bridge python bridge.py verify-webhook
 ```
 
 ### Important Notes
@@ -62,15 +71,15 @@ docker-compose exec bridge python bridge.py verify-webhook
 #### Tunnel URL Changes
 
 - Quick tunnels generate a **random URL each time** you restart
-- The URL changes on every restart: `docker-compose restart cloudflared` = new URL
+- The URL changes on every restart: `docker compose restart cloudflared` = new URL
 - You **must update** the Telegram webhook after each restart:
 
   ```bash
   # Get new URL
-  NEW_URL=$(docker-compose logs cloudflared 2>&1 | grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' | head -1)
+  NEW_URL=$(docker compose logs cloudflared 2>&1 | grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' | head -1)
 
   # Update webhook
-  docker-compose exec bridge python bridge.py set-webhook --domain "${NEW_URL#https://}"
+  docker compose exec bridge python bridge.py set-webhook --domain "${NEW_URL#https://}"
   ```
 
 #### Persistent Tunnel (Optional)
@@ -84,7 +93,7 @@ For a **permanent URL** that doesn't change on restart:
    cloudflared tunnel login
    cloudflared tunnel create claude-telegram
    ```
-4. Update `docker-compose.yml`:
+4. Update `docker compose.yml`:
    ```yaml
    cloudflared:
      image: cloudflare/cloudflared:latest
@@ -97,7 +106,7 @@ For a **permanent URL** that doesn't change on restart:
 **Tunnel URL not appearing:**
 
 ```bash
-docker-compose logs cloudflared
+docker compose logs cloudflared
 # Look for connection errors or startup issues
 ```
 
@@ -105,16 +114,16 @@ docker-compose logs cloudflared
 
 ```bash
 # Check if tunnel URL changed
-docker-compose logs cloudflared | grep trycloudflare.com
+docker compose logs cloudflared | grep trycloudflare.com
 
 # Verify webhook
-docker-compose exec bridge python bridge.py get-webhook-info
+docker compose exec bridge python bridge.py get-webhook-info
 ```
 
 **Container keeps restarting:**
 
 ```bash
-docker-compose logs bridge
+docker compose logs bridge
 # Check for Python errors or missing environment variables
 ```
 
@@ -174,13 +183,13 @@ nano Caddyfile
 # Change "coder.luandro.com" to your domain
 
 # 2. Start containers
-docker-compose --profile production up -d
+docker compose --profile production up -d
 
 # 3. Set webhook
-docker-compose exec bridge python bridge.py set-webhook --domain your-domain.com
+docker compose exec bridge python bridge.py set-webhook --domain your-domain.com
 
 # 4. Verify
-docker-compose exec bridge python bridge.py verify-webhook
+docker compose exec bridge python bridge.py verify-webhook
 ```
 
 ### Port Configuration
@@ -238,7 +247,7 @@ sysctl net.ipv4.ip_unprivileged_port_start
 
 ```bash
 # Check Caddy logs
-docker-compose logs caddy
+docker compose logs caddy
 
 # Verify DNS resolves correctly
 dig +short your-domain.com
@@ -254,7 +263,7 @@ curl -v http://your-domain.com
 curl https://your-domain.com/health
 
 # Check Telegram webhook info
-docker-compose exec bridge python bridge.py get-webhook-info
+docker compose exec bridge python bridge.py get-webhook-info
 ```
 
 ---
@@ -265,7 +274,7 @@ docker-compose exec bridge python bridge.py get-webhook-info
 
 ```bash
 # 1. Stop tunnel mode
-docker-compose --profile tunnel down
+docker compose --profile tunnel down
 
 # 2. Update .env with your domain
 nano .env
@@ -279,7 +288,7 @@ nano .env
 
 ```bash
 # 1. Stop production mode
-docker-compose --profile production down
+docker compose --profile production down
 
 # 2. Start tunnel mode
 ./start-tunnel.sh
@@ -293,19 +302,19 @@ docker-compose --profile production down
 
 ```bash
 # Tunnel mode
-docker-compose logs -f bridge cloudflared
+docker compose logs -f bridge cloudflared
 
 # Production mode
-docker-compose logs -f bridge caddy
+docker compose logs -f bridge caddy
 
 # Just bridge
-docker-compose logs -f bridge
+docker compose logs -f bridge
 ```
 
 ### Check Container Status
 
 ```bash
-docker-compose ps
+docker compose ps
 
 # Should show:
 # - bridge: Up (healthy)
@@ -317,10 +326,10 @@ docker-compose ps
 
 ```bash
 # Get webhook info
-docker-compose exec bridge python bridge.py get-webhook-info
+docker compose exec bridge python bridge.py get-webhook-info
 
 # Verify webhook status
-docker-compose exec bridge python bridge.py verify-webhook
+docker compose exec bridge python bridge.py verify-webhook
 
 # Check health endpoint
 curl -f http://localhost:8080/health
@@ -383,7 +392,7 @@ curl -f http://localhost:8080/health
 ```bash
 echo "net.ipv4.ip_unprivileged_port_start=80" | sudo tee -a /etc/sysctl.conf
 sudo sysctl -p
-docker-compose restart
+docker compose restart
 ```
 
 ### Issue: Tunnel URL keeps changing
@@ -394,8 +403,8 @@ docker-compose restart
 
 **Checklist:**
 
-1. Check bridge logs: `docker-compose logs bridge`
-2. Verify webhook: `docker-compose exec bridge python bridge.py get-webhook-info`
+1. Check bridge logs: `docker compose logs bridge`
+2. Verify webhook: `docker compose exec bridge python bridge.py get-webhook-info`
 3. Check state files: `ls -la ~/.claude/telegram_*`
 4. Verify hook: `ls -la ~/.claude/hooks/send-to-telegram.sh`
 5. Test tmux: `tmux attach -t claude`
@@ -406,7 +415,7 @@ docker-compose restart
 
 ```bash
 # 1. Verify hook installed in container
-docker-compose exec bridge ls -la /claude/hooks/
+docker compose exec bridge ls -la /claude/hooks/
 
 # 2. Check Claude settings
 cat ~/.claude/settings.json | jq '.hooks'
@@ -430,7 +439,7 @@ After successful deployment:
 
    ```bash
    # Watch logs in real-time
-   docker-compose logs -f bridge
+   docker compose logs -f bridge
 
    # Monitor resource usage
    docker stats
@@ -442,7 +451,7 @@ After successful deployment:
    # Docker service starts on boot
    sudo systemctl enable docker
 
-   # Add restart policy (already in docker-compose.yml)
+   # Add restart policy (already in docker compose.yml)
    # restart: unless-stopped
    ```
 
@@ -467,14 +476,14 @@ After successful deployment:
 ./start-tunnel.sh
 
 # Get tunnel URL
-docker-compose logs cloudflared | grep trycloudflare.com
+docker compose logs cloudflared | grep trycloudflare.com
 
 # Update webhook after restart
-NEW_URL=$(docker-compose logs cloudflared 2>&1 | grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' | head -1)
-docker-compose exec bridge python bridge.py set-webhook --domain "${NEW_URL#https://}"
+NEW_URL=$(docker compose logs cloudflared 2>&1 | grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' | head -1)
+docker compose exec bridge python bridge.py set-webhook --domain "${NEW_URL#https://}"
 
 # Stop
-docker-compose --profile tunnel down
+docker compose --profile tunnel down
 ```
 
 ### Production Mode Commands
@@ -484,29 +493,29 @@ docker-compose --profile tunnel down
 ./start-production.sh
 
 # Verify webhook
-docker-compose exec bridge python bridge.py verify-webhook
+docker compose exec bridge python bridge.py verify-webhook
 
 # Restart services
-docker-compose --profile production restart
+docker compose --profile production restart
 
 # Stop
-docker-compose --profile production down
+docker compose --profile production down
 ```
 
 ### Useful Commands (Both Modes)
 
 ```bash
 # View logs
-docker-compose logs -f bridge
+docker compose logs -f bridge
 
 # Check status
-docker-compose ps
+docker compose ps
 
 # Restart bridge only
-docker-compose restart bridge
+docker compose restart bridge
 
 # Execute commands in bridge
-docker-compose exec bridge python bridge.py --help
+docker compose exec bridge python bridge.py --help
 
 # Access tmux session
 tmux attach -t claude

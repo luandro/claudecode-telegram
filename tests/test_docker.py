@@ -6,6 +6,33 @@ import subprocess
 import sys
 from pathlib import Path
 
+def get_docker_compose_command():
+    """Detect and return appropriate docker compose command (V1 or V2)."""
+    try:
+        result = subprocess.run(
+            ["docker", "compose", "version"],
+            capture_output=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            return ["docker", "compose"]
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    # Fallback to docker-compose (V1)
+    try:
+        result = subprocess.run(
+            ["docker-compose", "--version"],
+            capture_output=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            return ["docker-compose"]
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    return None
+
 def test_dockerfile_exists():
     """Test that Dockerfile exists and is valid."""
     dockerfile_path = Path(__file__).parent.parent / "Dockerfile"
@@ -71,21 +98,27 @@ def test_dockerfile_syntax():
         print(f"⚠ Docker syntax check skipped: {e}")
 
 def test_docker_compose_syntax():
-    """Test docker-compose.yml syntax using docker-compose command."""
+    """Test docker-compose.yml syntax using docker compose command."""
+    compose_cmd = get_docker_compose_command()
+    if not compose_cmd:
+        print("⚠ Neither docker compose nor docker-compose available for syntax check")
+        return
+
     try:
+        cmd = compose_cmd + ["config", "--quiet"]
         result = subprocess.run(
-            ["docker-compose", "config", "--quiet"],
+            cmd,
             capture_output=True,
             text=True,
             cwd=Path(__file__).parent.parent,
             timeout=30
         )
         if result.returncode == 0:
-            print("✓ docker-compose.yml syntax is valid")
+            print(f"✓ docker-compose.yml syntax is valid (using {' '.join(compose_cmd)})")
         else:
             print(f"⚠ docker-compose config check failed: {result.stderr}")
     except FileNotFoundError:
-        print("⚠ docker-compose not available for syntax check")
+        print("⚠ docker compose command not available for syntax check")
     except Exception as e:
         print(f"⚠ docker-compose syntax check skipped: {e}")
 

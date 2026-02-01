@@ -178,11 +178,13 @@ The bridge automatically configures the Telegram webhook on startup:
 **Verification:**
 
 ```bash
+# Both "docker compose" (V2) and "docker-compose" (V1) commands are supported
 # Check webhook status
-docker-compose exec bridge python bridge.py get-webhook-info
+docker compose exec bridge python bridge.py get-webhook-info
+# OR: docker-compose exec bridge python bridge.py get-webhook-info
 
 # Verify webhook is working
-docker-compose exec bridge python bridge.py verify-webhook
+docker compose exec bridge python bridge.py verify-webhook
 
 # Check health endpoint (includes webhook status and validates against Telegram)
 docker compose exec bridge curl -s http://localhost:8080/health
@@ -225,6 +227,8 @@ curl -s http://localhost:8080/health | jq
 
 This repo includes a Docker Compose stack with a Caddy reverse proxy for HTTPS.
 
+**Note:** All scripts and commands support both `docker compose` (V2, built into Docker Desktop) and `docker-compose` (V1, standalone plugin). The scripts automatically detect which version is available.
+
 ### Prerequisites
 
 ```bash
@@ -232,6 +236,11 @@ This repo includes a Docker Compose stack with a Caddy reverse proxy for HTTPS.
 curl -fsSL https://get.docker.com -o get-docker.sh
 sudo sh get-docker.sh
 sudo usermod -aG docker $USER
+
+# For Docker Compose V2 (included with Docker Desktop)
+# No additional installation needed
+
+# For Docker Compose V1 (standalone)
 sudo apt-get install docker-compose-plugin
 ```
 

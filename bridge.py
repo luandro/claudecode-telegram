@@ -375,7 +375,7 @@ def _auto_setup_webhook():
 
         if not tunnel_url:
             print("Failed to get tunnel URL - webhook not configured", flush=True)
-            print("You can manually set webhook with: docker-compose exec bridge python bridge.py set-webhook --domain <your-domain>", flush=True)
+            print("You can manually set webhook with: docker compose exec bridge python bridge.py set-webhook --domain <your-domain>", flush=True)
             return False
 
         webhook_url = f"{tunnel_url}/{WEBHOOK_PATH}"
@@ -923,7 +923,7 @@ def main():
             result = _auto_setup_webhook()
             if result is False:
                 print("Warning: Webhook auto-setup failed - may need manual configuration", flush=True)
-                print("Manual setup: docker-compose exec bridge python bridge.py set-webhook --domain <your-domain>", flush=True)
+                print("Manual setup: docker compose exec bridge python bridge.py set-webhook --domain <your-domain>", flush=True)
                 _update_webhook_status_cache(configured=False, error="Initial auto-setup failed")
             elif result is True:
                 _verify_and_update_webhook_status()

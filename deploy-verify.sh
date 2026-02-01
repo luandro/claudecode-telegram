@@ -28,6 +28,18 @@ log_error() {
     echo -e "${RED}✗${NC} $1"
 }
 
+# Detect and use appropriate docker compose command
+docker_compose() {
+    if docker compose version &>/dev/null 2>&1; then
+        docker compose "$@"
+    elif command -v docker-compose &>/dev/null 2>&1; then
+        docker-compose "$@"
+    else
+        echo "Error: Neither 'docker compose' nor 'docker-compose' found" >&2
+        return 1
+    fi
+}
+
 # Check functions
 check_command() {
     if command -v "$1" &> /dev/null; then
@@ -35,6 +47,20 @@ check_command() {
         return 0
     else
         log_error "$1 is not installed"
+        return 1
+    fi
+}
+
+# Check for docker compose (either V1 or V2)
+check_docker_compose() {
+    if docker compose version &>/dev/null 2>&1; then
+        log_success "docker compose (V2) is installed"
+        return 0
+    elif command -v docker-compose &>/dev/null 2>&1; then
+        log_success "docker-compose (V1) is installed"
+        return 0
+    else
+        log_error "Neither docker compose nor docker-compose is installed"
         return 1
     fi
 }
@@ -49,7 +75,7 @@ echo ""
 log_info "Step 1: Checking environment setup..."
 
 # Check required commands
-REQUIRED_COMMANDS=("docker" "docker-compose" "tmux" "curl" "python3")
+REQUIRED_COMMANDS=("docker" "tmux" "curl" "python3")
 MISSING_COMMANDS=()
 
 for cmd in "${REQUIRED_COMMANDS[@]}"; do
@@ -58,12 +84,20 @@ for cmd in "${REQUIRED_COMMANDS[@]}"; do
     fi
 done
 
+# Check docker compose separately (V1 or V2)
+if ! check_docker_compose; then
+    MISSING_COMMANDS+=("docker-compose/docker compose")
+fi
+
 if [ ${#MISSING_COMMANDS[@]} -ne 0 ]; then
     log_error "Missing required commands: ${MISSING_COMMANDS[*]}"
     echo ""
     echo "Install missing commands:"
     echo "  sudo apt-get update"
     echo "  sudo apt-get install -y docker.io docker-compose tmux curl python3"
+    echo ""
+    echo "For Docker Compose V2 (if using Docker desktop):"
+    echo "  docker compose is included with Docker desktop"
     exit 1
 fi
 
@@ -168,20 +202,20 @@ echo ""
 log_info "Step 5: Checking Docker stack..."
 
 # Check if containers exist
-if docker-compose ps | grep -q "claudecode-telegram"; then
+if docker_compose ps | grep -q "claudecode-telegram"; then
     log_success "Docker stack exists"
 
     # Check if running
-    if docker-compose ps | grep -q "Up"; then
+    if docker_compose ps | grep -q "Up"; then
         log_success "Containers are running"
 
         # Show status
         echo ""
-        docker-compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Health}}"
+        docker_compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Health}}"
         echo ""
 
         # Check health
-        if docker-compose ps | grep "bridge" | grep -q "healthy"; then
+        if docker_compose ps | grep "bridge" | grep -q "healthy"; then
             log_success "Bridge container is healthy"
         else
             log_warning "Bridge container health check not passing"
@@ -190,13 +224,13 @@ if docker-compose ps | grep -q "claudecode-telegram"; then
         log_warning "Containers exist but are not running"
         echo ""
         echo "Start containers:"
-        echo "  docker-compose up -d"
+        echo "  docker_compose up -d"
     fi
 else
     log_warning "Docker stack not started"
     echo ""
     echo "Start Docker stack:"
-    echo "  docker-compose up -d"
+    echo "  docker_compose up -d"
 fi
 
 echo ""
@@ -204,9 +238,9 @@ echo ""
 # Step 6: Webhook Configuration
 log_info "Step 6: Checking webhook configuration..."
 
-if docker-compose ps | grep -q "bridge.*Up"; then
+if docker_compose ps | grep -q "bridge.*Up"; then
     # Get webhook info
-    WEBHOOK_INFO=$(docker-compose exec -T bridge claudecode-telegram get-webhook-info 2>/dev/null || echo "{}")
+    WEBHOOK_INFO=$(docker_compose exec -T bridge python bridge.py get-webhook-info 2>/dev/null || echo "{}")
 
     if echo "$WEBHOOK_INFO" | grep -q "\"ok\": true"; then
         WEBHOOK_URL=$(echo "$WEBHOOK_INFO" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('result', {}).get('url', 'NOT SET'))" 2>/dev/null || echo "NOT SET")
@@ -226,7 +260,7 @@ if docker-compose ps | grep -q "bridge.*Up"; then
             log_warning "Webhook not configured"
             echo ""
             echo "Set webhook:"
-            echo "  docker-compose exec bridge claudecode-telegram set-webhook --domain $DOMAIN"
+            echo "  docker_compose exec bridge python bridge.py set-webhook --domain $DOMAIN"
         fi
     else
         log_error "Failed to get webhook info"
@@ -274,7 +308,7 @@ check_result() {
 [ "$DM_ALLOWED_USER_ID" = "244055394" ]; check_result $? "DM allowlist set correctly"
 [ -n "$SERVER_IP" ]; check_result $? "DNS resolves"
 tmux has-session -t "$TMUX_SESSION" 2>/dev/null; check_result $? "tmux session running"
-docker-compose ps | grep -q "bridge.*Up.*healthy"; check_result $? "Docker stack healthy"
+docker_compose ps | grep -q "bridge.*Up.*healthy"; check_result $? "Docker stack healthy"
 
 echo ""
 echo "Results: $CHECKS_PASSED/$CHECKS_TOTAL checks passed"
