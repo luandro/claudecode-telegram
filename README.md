@@ -137,26 +137,89 @@ curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://Y
 
 Environment variables can be set via `.env` (see `.env.example`).
 
-| Variable                    | Default             | Description                                                                    |
-| --------------------------- | ------------------- | ------------------------------------------------------------------------------ |
-| `TELEGRAM_BOT_TOKEN`        | required            | Bot token from @BotFather                                                      |
-| `TELEGRAM_WEBHOOK_SECRET`   | empty               | Secret token to validate webhook requests (recommended)                        |
-| `WEBHOOK_DOMAIN`            | `coder.luandro.com` | Default domain for the `set-webhook` command                                   |
-| `WEBHOOK_PATH`              | auto-generated      | Random webhook path (64-char hex string)                                       |
-| `DM_ALLOWED_USER_ID`        | empty               | Single user ID allowed for DMs (private messages)                              |
-| `ALLOWED_TELEGRAM_USER_IDS` | empty               | Comma-separated list of allowed user IDs for groups/channels                   |
-| `TMUX_SESSION`              | `claude`            | tmux session name                                                              |
-| `PORT`                      | `8080`              | Bridge port                                                                    |
-| `HOST`                      | `127.0.0.1`         | Bridge host (set to `0.0.0.0` for Docker so Caddy can reach the bridge)         |
-| `TELEGRAM_REACTION_EMOJI`   | thumbs up           | Emoji reaction (set to "none", "false", "0", or empty to disable)            |
-| `TMUX_SOCKET`               | `/tmp/tmux-1000/default` | tmux socket path for Docker deployments                                 |
-| `CADDY_HTTP_PORT`           | `8081`              | External HTTP port for Caddy (rootless-safe)                                   |
-| `CADDY_HTTPS_PORT`          | `8443`              | External HTTPS port for Caddy (rootless-safe)                                  |
+| Variable                    | Default                     | Description                                                             |
+| --------------------------- | --------------------------- | ----------------------------------------------------------------------- |
+| `TELEGRAM_BOT_TOKEN`        | **required**                | Bot token from @BotFather                                               |
+| `DEPLOYMENT_MODE`           | **required**                | Deployment mode: `tunnel` (Cloudflare) or `production` (Caddy/HTTPS)    |
+| `WEBHOOK_DOMAIN`            | **required for production** | Domain for webhook URL (only used when `DEPLOYMENT_MODE=production`)    |
+| `TELEGRAM_WEBHOOK_SECRET`   | empty                       | Secret token to validate webhook requests (recommended)                 |
+| `WEBHOOK_PATH`              | auto-generated              | Random webhook path (64-char hex string)                                |
+| `WEBHOOK_AUTO_SETUP`        | `true`                      | Enable/disable automatic webhook configuration on startup               |
+| `WEBHOOK_STARTUP_DELAY`     | `5`                         | Seconds to wait for dependent services before auto-setup                |
+| `DM_ALLOWED_USER_ID`        | empty                       | Single user ID allowed for DMs (private messages)                       |
+| `ALLOWED_TELEGRAM_USER_IDS` | empty                       | Comma-separated list of allowed user IDs for groups/channels            |
+| `TMUX_SESSION`              | `claude`                    | tmux session name                                                       |
+| `PORT`                      | `8080`                      | Bridge port                                                             |
+| `HOST`                      | `127.0.0.1`                 | Bridge host (set to `0.0.0.0` for Docker so Caddy can reach the bridge) |
+| `TELEGRAM_REACTION_EMOJI`   | thumbs up                   | Emoji reaction (set to "none", "false", "0", or empty to disable)       |
+| `TMUX_SOCKET`               | `/tmp/tmux-1000/default`    | tmux socket path for Docker deployments                                 |
+| `CADDY_HTTP_PORT`           | `8081`                      | External HTTP port for Caddy (rootless-safe)                            |
+| `CADDY_HTTPS_PORT`          | `8443`                      | External HTTPS port for Caddy (rootless-safe)                           |
 
 ### Access Control
 
 - **DM (private messages)**: `DM_ALLOWED_USER_ID` must be set to allow DMs. If empty, DMs are rejected.
 - **Groups/channels**: `ALLOWED_TELEGRAM_USER_IDS` restricts who can use the bot in non-DM chats. If empty, all users are allowed (not recommended for production).
+
+### Automatic Webhook Configuration
+
+The bridge automatically configures the Telegram webhook on startup:
+
+- **Tunnel Mode** (`DEPLOYMENT_MODE=tunnel`): Automatically detects the cloudflared tunnel URL and registers it with Telegram
+- **Production Mode** (`DEPLOYMENT_MODE=production`): Uses the `WEBHOOK_DOMAIN` environment variable to register the webhook
+- **Telegram Validation**: Verifies against actual Telegram webhook status (not just local state) to detect external changes
+- **Retry Logic**: Waits up to ~60 seconds for the tunnel URL (tunnel mode) before requiring manual configuration
+
+**Configuration:**
+
+- Set `WEBHOOK_AUTO_SETUP=false` to disable automatic webhook configuration
+- Adjust `WEBHOOK_STARTUP_DELAY` (default: 5 seconds) to allow more time for dependent services to initialize
+
+**Verification:**
+
+```bash
+# Check webhook status
+docker-compose exec bridge python bridge.py get-webhook-info
+
+# Verify webhook is working
+docker-compose exec bridge python bridge.py verify-webhook
+
+# Check health endpoint (includes webhook status and validates against Telegram)
+docker compose exec bridge curl -s http://localhost:8080/health
+```
+
+### Troubleshooting
+
+**"ERROR: DEPLOYMENT_MODE not set"**
+
+You must explicitly set `DEPLOYMENT_MODE` in your `.env` file:
+
+```bash
+DEPLOYMENT_MODE=tunnel      # For local development with Cloudflare Tunnel
+# or
+DEPLOYMENT_MODE=production  # For public deployment with Caddy
+```
+
+**"ERROR: WEBHOOK_DOMAIN not set for production mode"**
+
+When using `DEPLOYMENT_MODE=production`, you must also set `WEBHOOK_DOMAIN`:
+
+```bash
+WEBHOOK_DOMAIN=your-domain.com
+```
+
+**"State file exists but webhook not in Telegram"**
+
+This warning appears when the local state file indicates a webhook was configured, but Telegram reports no webhook. The bridge will automatically reconfigure the webhook.
+
+**Checking webhook status via health endpoint**
+
+The `/health` endpoint always returns HTTP 200 but includes detailed status in the response body. Check `webhook_configured` field for webhook status:
+
+```bash
+curl -s http://localhost:8080/health | jq
+# Look for: "webhook_configured": true/false
+```
 
 ## Docker Deployment (Caddy + HTTPS)
 
@@ -174,7 +237,7 @@ sudo apt-get install docker-compose-plugin
 
 ### Configuration
 
-1) Configure environment:
+1. Configure environment:
 
 ```bash
 cp .env.example .env
@@ -183,7 +246,7 @@ nano .env
 
 Set `HOST=0.0.0.0` in `.env` so the bridge binds to all interfaces inside the container.
 
-2) Update your Caddyfile domain:
+2. Update your Caddyfile domain:
 
 ```caddyfile
 your-domain.com {
@@ -192,7 +255,7 @@ your-domain.com {
 }
 ```
 
-3) Verify tmux socket path if needed:
+3. Verify tmux socket path if needed:
 
 ```bash
 tmux display-message -p "#{socket_path}"
@@ -207,14 +270,28 @@ docker compose up -d
 docker compose logs -f
 ```
 
-### Set the webhook
+The webhook will be automatically configured on startup. Check the logs to verify:
 
 ```bash
-# Recommended CLI command
-docker compose exec bridge claudecode-telegram set-webhook --domain your-domain.com
+docker compose logs bridge | grep -i webhook
+```
 
-# Or manually
-docker compose exec bridge curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://your-domain.com/${WEBHOOK_PATH}&secret_token=${TELEGRAM_WEBHOOK_SECRET}"
+### Webhook Management (Optional)
+
+The webhook is configured automatically, but you can still manage it manually if needed:
+
+```bash
+# Verify webhook status
+docker compose exec bridge python bridge.py verify-webhook
+
+# Get webhook info
+docker compose exec bridge python bridge.py get-webhook-info
+
+# Manually set webhook (if auto-setup is disabled)
+docker compose exec bridge python bridge.py set-webhook --domain your-domain.com
+
+# Delete webhook
+docker compose exec bridge python bridge.py delete-webhook
 ```
 
 ## Webhook Management (CLI)
