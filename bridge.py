@@ -12,9 +12,12 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
 TMUX_SESSION = os.environ.get("TMUX_SESSION", "claude")
-CHAT_ID_FILE = os.path.expanduser("~/.claude/telegram_chat_id")
-PENDING_FILE = os.path.expanduser("~/.claude/telegram_pending")
-HISTORY_FILE = os.path.expanduser("~/.claude/history.jsonl")
+# Claude directory for state files (default to ~/.claude, overridden by env var)
+CLAUDE_DIR = os.environ.get("CLAUDE_DIR", os.path.expanduser("~/.claude"))
+
+CHAT_ID_FILE = os.path.join(CLAUDE_DIR, "telegram_chat_id")
+PENDING_FILE = os.path.join(CLAUDE_DIR, "telegram_pending")
+HISTORY_FILE = os.path.join(CLAUDE_DIR, "history.jsonl")
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 PORT = int(os.environ.get("PORT", "8080"))
 # Default to localhost-only for security. Use 0.0.0.0 to bind all interfaces.
