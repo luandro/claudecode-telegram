@@ -17,6 +17,10 @@ services:
       - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
       - WEBHOOK_PATH=${WEBHOOK_PATH}
       - CLAUDE_DIR=/claude
+      - DEPLOYMENT_MODE=${DEPLOYMENT_MODE}
+      - WEBHOOK_DOMAIN=${WEBHOOK_DOMAIN}
+      - WEBHOOK_AUTO_SETUP=${WEBHOOK_AUTO_SETUP:-true}
+      - WEBHOOK_STARTUP_DELAY=${WEBHOOK_STARTUP_DELAY:-5}
     volumes:
       # Mount tmux socket for Claude Code communication
       - ${TMUX_SOCKET:-/tmp/tmux-1000/default}:/tmux-socket:ro
@@ -58,11 +62,37 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: claudecode-telegram-cloudflared
     restart: unless-stopped
-    command: tunnel --no-autoupdate --url http://bridge:8080
+    command: >
+      sh -c '
+        set -eu
+        rm -f /claude/cloudflared_tunnel_url
+        cloudflared tunnel --no-autoupdate --url http://bridge:8080 2>&1 |
+        while IFS= read -r line; do
+          printf "%s\n" "$line"
+          case "$line" in
+            *trycloudflare.com*)
+              url=$(printf "%s" "$line" | sed -n "s/.*\\(https:\\/\\/[a-z0-9-]*\\.trycloudflare\\.com\\).*/\\1/p")
+              if [ -n "$url" ]; then printf "%s" "$url" > /claude/cloudflared_tunnel_url; fi
+              ;;
+          esac
+        done
+      '
     networks:
       - claude-telegram-net
+    volumes:
+      # Share Claude config directory so cloudflared can publish its quick-tunnel URL
+      - ${CLAUDE_DIR:-${HOME}/.claude}:/claude:rw
     depends_on:
-      - bridge
+      bridge:
+        condition: service_started
+    healthcheck:
+      # File-based healthcheck - cloudflared writes tunnel URL to this file when ready
+      # More reliable than wget/curl which may not exist in the cloudflared image
+      test: ["CMD", "test", "-f", "/claude/cloudflared_tunnel_url"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     profiles:
       - tunnel
 

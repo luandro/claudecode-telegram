@@ -3,7 +3,9 @@
 
 import os
 import json
+import re
 import secrets
+import shutil
 import subprocess
 import threading
 import time
@@ -64,6 +66,16 @@ else:
 # Optional tmux socket path (useful when running in Docker with mounted socket)
 TMUX_SOCKET_PATH = os.environ.get("TMUX_SOCKET_PATH", "")
 
+# Webhook status cache for fast health checks (avoid external API calls)
+# Updated by the recovery loop, read by health check endpoint
+_webhook_status_cache = {
+    "configured": False,
+    "url": None,
+    "last_check": 0,
+    "last_error": None,
+}
+_webhook_status_lock = threading.Lock()
+
 BOT_COMMANDS = [
     {"command": "clear", "description": "Clear conversation"},
     {"command": "resume", "description": "Resume session (shows picker)"},
@@ -123,23 +135,7 @@ def setup_bot_commands():
 def set_webhook(domain: str) -> bool:
     """Set the Telegram webhook URL with current configuration."""
     webhook_url = f"https://{domain}/{WEBHOOK_PATH}"
-    params = {"url": webhook_url}
-
-    if TELEGRAM_WEBHOOK_SECRET:
-        params["secret_token"] = TELEGRAM_WEBHOOK_SECRET
-
-    result = telegram_api("setWebhook", params)
-    if result and result.get("ok"):
-        print(f"Webhook set successfully: {webhook_url}")
-        if TELEGRAM_WEBHOOK_SECRET:
-            print("Secret token: configured")
-        else:
-            print("Secret token: not configured (recommended)")
-        return True
-    else:
-        error_desc = result.get("description", "Unknown error") if result else "No response"
-        print(f"Failed to set webhook: {error_desc}")
-        return False
+    return _set_webhook_internal(webhook_url)
 
 
 def get_webhook_info() -> dict:
@@ -151,11 +147,36 @@ def get_webhook_info() -> dict:
     return {}
 
 
+def _get_current_telegram_webhook() -> str | None:
+    """Get currently configured webhook URL from Telegram.
+
+    Returns:
+        Current webhook URL string, or None if no webhook is set or on error
+    """
+    result = telegram_api("getWebhookInfo", {})
+    if not result or not result.get("ok"):
+        print("Warning: Failed to query Telegram webhook status", flush=True)
+        return None
+
+    info = result.get("result", {})
+    url = info.get("url", "").strip()
+
+    # Check for webhook errors
+    if info.get("last_error_date"):
+        last_error_msg = info.get("last_error_message", "Unknown error")
+        error_age = int(time.time()) - info.get("last_error_date", 0)
+        if error_age < 3600:  # Recent error (within last hour)
+            print(f"Warning: Recent webhook error ({error_age}s ago): {last_error_msg}", flush=True)
+
+    return url if url else None
+
+
 def delete_webhook() -> bool:
     """Delete the current webhook."""
     result = telegram_api("deleteWebhook", {"drop_pending_updates": True})
     if result and result.get("ok"):
         print("Webhook deleted successfully")
+        _delete_file(_webhook_state_file())
         return True
     error_desc = result.get("description", "Unknown error") if result else "No response"
     print(f"Failed to delete webhook: {error_desc}")
@@ -190,13 +211,250 @@ def verify_webhook() -> bool:
 
     # Check for recent errors
     if last_error:
-        import time
         error_age = int(time.time()) - last_error
         if error_age < 3600:  # Error in the last hour
             print(f"Warning: Recent webhook error ({error_age} seconds ago)")
 
     print(f"Webhook OK: {url}")
     return True
+
+
+def _webhook_state_file() -> Path:
+    return Path(CLAUDE_DIR) / "telegram_webhook_url"
+
+
+def _tunnel_url_file() -> Path:
+    return Path(CLAUDE_DIR) / "cloudflared_tunnel_url"
+
+
+def _read_text_file(path: Path) -> str | None:
+    try:
+        if not path.exists():
+            return None
+        value = path.read_text().strip()
+        return value if value else None
+    except Exception:
+        return None
+
+
+def _write_text_file(path: Path, text: str) -> bool:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        return True
+    except Exception:
+        return False
+
+
+def _delete_file(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+def _is_valid_domain(domain: str) -> bool:
+    """Basic domain name validation.
+
+    Args:
+        domain: Domain name to validate (e.g., 'example.com', 'sub.example.com')
+
+    Returns:
+        True if domain format is valid, False otherwise
+    """
+    if not domain or len(domain) > 253:
+        return False
+    # Basic pattern: alphanumeric + hyphens + dots, proper TLD
+    pattern = r'^([a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$'
+    return bool(re.match(pattern, domain.lower()))
+
+
+def _get_cloudflared_tunnel_url_from_state(max_wait_seconds=60, poll_interval=2):
+    """Get public URL for Cloudflare quick tunnels.
+
+    In Docker deployments, the `cloudflared` container writes the discovered URL
+    into a shared state file (in `CLAUDE_DIR`) that the bridge reads.
+
+    Args:
+        max_wait_seconds: Maximum time to wait for tunnel URL file
+        poll_interval: Seconds between file checks
+
+    Returns:
+        Tunnel URL string or None if not found within timeout
+    """
+    deadline = time.time() + max_wait_seconds
+    while time.time() < deadline:
+        tunnel_url = _read_text_file(_tunnel_url_file())
+        if tunnel_url:
+            return tunnel_url
+        time.sleep(poll_interval)
+
+    return None
+
+
+def _set_webhook_internal(webhook_url):
+    """Internal function to set webhook via Telegram API.
+
+    Args:
+        webhook_url: Full webhook URL to register
+
+    Returns:
+        True if successful, False otherwise
+    """
+    params = {
+        "url": webhook_url,
+        "max_connections": 100,
+        "drop_pending_updates": False
+    }
+
+    if TELEGRAM_WEBHOOK_SECRET:
+        params["secret_token"] = TELEGRAM_WEBHOOK_SECRET
+
+    result = telegram_api("setWebhook", params)
+    if result and result.get("ok"):
+        print(f"Webhook configured: {webhook_url}", flush=True)
+        if TELEGRAM_WEBHOOK_SECRET:
+            print("Secret token: configured", flush=True)
+        _write_text_file(_webhook_state_file(), webhook_url)
+        return True
+    else:
+        error_desc = result.get("description", "Unknown error") if result else "No response"
+        print(f"Failed to set webhook: {error_desc}", flush=True)
+        return False
+
+
+def _auto_setup_webhook():
+    """Auto-configure Telegram webhook on startup.
+
+    This function:
+    1. Checks if auto-setup is enabled
+    2. Validates deployment mode is set and valid
+    3. Detects deployment mode (tunnel vs production)
+    4. Validates domain format for production mode
+    5. Gets the appropriate webhook URL
+    6. Validates against actual Telegram webhook status (not just local state)
+    7. Only re-registers if URL has changed in Telegram
+    8. Stores configured URL in state file
+
+    Returns:
+        True if configured, False if attempted but failed, None if disabled
+    """
+    # Check if auto-setup is enabled
+    auto_setup_enabled = os.environ.get("WEBHOOK_AUTO_SETUP", "true").lower() not in ("false", "0", "no")
+    if not auto_setup_enabled:
+        print("Webhook auto-setup disabled via WEBHOOK_AUTO_SETUP", flush=True)
+        return None
+
+    # Validate deployment mode is explicitly set
+    deployment_mode = os.environ.get("DEPLOYMENT_MODE", "").lower().strip()
+
+    if not deployment_mode:
+        print("ERROR: DEPLOYMENT_MODE not set", flush=True)
+        print("Please set DEPLOYMENT_MODE to 'tunnel' or 'production' in your .env file", flush=True)
+        print("See .env.example for configuration instructions", flush=True)
+        return False
+
+    if deployment_mode not in ("tunnel", "production"):
+        print(f"ERROR: Invalid DEPLOYMENT_MODE='{deployment_mode}'", flush=True)
+        print("Valid options: 'tunnel' or 'production'", flush=True)
+        return False
+
+    print(f"Auto-setup webhook for deployment mode: {deployment_mode}", flush=True)
+
+    # State file to track configured webhook URL
+    webhook_state_file = _webhook_state_file()
+    last_webhook_url = _read_text_file(webhook_state_file)
+
+    # Determine webhook URL based on deployment mode
+    webhook_url = None
+
+    if deployment_mode == "tunnel":
+        # Get tunnel URL from cloudflared
+        print("Waiting for cloudflared tunnel URL...", flush=True)
+        tunnel_url = _get_cloudflared_tunnel_url_from_state(max_wait_seconds=60, poll_interval=2)
+
+        if not tunnel_url:
+            print("Failed to get tunnel URL - webhook not configured", flush=True)
+            print("You can manually set webhook with: docker-compose exec bridge python bridge.py set-webhook --domain <your-domain>", flush=True)
+            return False
+
+        webhook_url = f"{tunnel_url}/{WEBHOOK_PATH}"
+
+    else:  # production mode
+        domain = os.environ.get("WEBHOOK_DOMAIN", "").strip()
+
+        if not domain:
+            print("ERROR: WEBHOOK_DOMAIN not set for production mode", flush=True)
+            print("Production mode requires a valid domain name", flush=True)
+            print("Example: WEBHOOK_DOMAIN=coder.luandro.com", flush=True)
+            print("Alternatively, use DEPLOYMENT_MODE=tunnel for local development", flush=True)
+            return False
+
+        # Validate domain format
+        if not _is_valid_domain(domain):
+            print(f"ERROR: Invalid WEBHOOK_DOMAIN format: {domain}", flush=True)
+            print("Domain should be in format: example.com or subdomain.example.com", flush=True)
+            return False
+
+        webhook_url = f"https://{domain}/{WEBHOOK_PATH}"
+
+    # Query actual Telegram webhook status (not just local state file)
+    current_telegram_webhook = _get_current_telegram_webhook()
+
+    # Clean up stale state file if it doesn't match Telegram reality
+    if last_webhook_url and not current_telegram_webhook:
+        print("Warning: State file exists but webhook not in Telegram (cleaning stale state)", flush=True)
+        _delete_file(webhook_state_file)
+
+    # Check if webhook is already correctly configured in Telegram
+    if current_telegram_webhook == webhook_url:
+        print(f"Webhook already configured in Telegram: {webhook_url}", flush=True)
+        # Update state file to match reality
+        _write_text_file(webhook_state_file, webhook_url)
+        return True
+
+    # Webhook needs to be set/updated
+    if current_telegram_webhook:
+        print(f"Webhook URL change detected:", flush=True)
+        print(f"  Current: {current_telegram_webhook}", flush=True)
+        print(f"  New:     {webhook_url}", flush=True)
+    else:
+        print(f"No webhook configured in Telegram, setting: {webhook_url}", flush=True)
+
+    # Set webhook
+    success = _set_webhook_internal(webhook_url)
+
+    return success
+
+
+def _update_webhook_status_cache(configured: bool, url: str | None = None, error: str | None = None):
+    """Update the webhook status cache (thread-safe).
+
+    Called by the recovery loop to update cached status that the health check reads.
+    """
+    with _webhook_status_lock:
+        _webhook_status_cache["configured"] = configured
+        _webhook_status_cache["url"] = url
+        _webhook_status_cache["last_check"] = int(time.time())
+        if error:
+            _webhook_status_cache["last_error"] = error
+        elif configured:
+            _webhook_status_cache["last_error"] = None
+
+
+def _verify_and_update_webhook_status() -> bool:
+    """Verify webhook status with Telegram and update cache.
+
+    Returns:
+        True if webhook is properly configured, False otherwise
+    """
+    current_url = _get_current_telegram_webhook()
+    if current_url:
+        _update_webhook_status_cache(configured=True, url=current_url)
+        return True
+    else:
+        _update_webhook_status_cache(configured=False, error="No webhook configured in Telegram")
+        return False
 
 
 def send_typing_loop(chat_id):
@@ -245,7 +503,6 @@ def _setup_hooks():
     
     # If source exists and destination doesn't, or if we want to ensure it's up to date
     if os.path.exists(hook_src):
-        import shutil
         print(f"Installing hook to {hook_dest}", flush=True)
         shutil.copy2(hook_src, hook_dest)
         os.chmod(hook_dest, 0o755)
@@ -365,10 +622,50 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         # Health check endpoint (public, no validation needed)
+        # IMPORTANT: This endpoint must be fast and local-only (no external API calls)
+        # to avoid Docker health check failures due to network issues
         if self.path == "/health":
+            deployment_mode = os.environ.get("DEPLOYMENT_MODE", "unknown")
+
+            # Read from local cache (updated by recovery loop)
+            with _webhook_status_lock:
+                webhook_configured = _webhook_status_cache["configured"]
+                last_check = _webhook_status_cache["last_check"]
+                last_error = _webhook_status_cache["last_error"]
+
+            # Also check local state file as fallback
+            state_file_url = _read_text_file(_webhook_state_file())
+            has_state_file = bool(state_file_url)
+
+            # Determine operational status
+            # "operational" means the server is running and ready to receive webhooks
+            # "webhook_configured" means we believe the webhook is set in Telegram
+            is_operational = True  # Server is always operational if responding
+
+            # Build health status response
+            status = {
+                "status": "healthy",  # Always healthy if server is responding
+                "operational": is_operational,
+                "webhook_configured": webhook_configured or has_state_file,
+                "deployment_mode": deployment_mode,
+                "timestamp": int(time.time()),
+            }
+
+            # Add cache age info
+            if last_check > 0:
+                status["webhook_last_verified"] = last_check
+                status["webhook_check_age_seconds"] = int(time.time()) - last_check
+
+            # Add warning if there's a recent error
+            if last_error:
+                status["webhook_last_error"] = last_error
+
+            # Always return 200 OK - report status in body
+            # This prevents Docker health check failures during startup or network issues
             self.send_response(200)
+            self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(b"OK")
+            self.wfile.write(json.dumps(status).encode())
             return
 
         # Validate webhook path for security
@@ -599,9 +896,88 @@ def main():
         # Default: run server (backward compatible)
         _setup_hooks()
         setup_bot_commands()
+
         print(f"Bridge on {HOST}:{PORT}/{WEBHOOK_PATH} | tmux: {TMUX_SESSION}", flush=True)
+        server = HTTPServer((HOST, PORT), Handler)
+
+        def _webhook_recovery_loop():
+            """Continuous loop that manages webhook configuration and monitors for changes.
+
+            This loop:
+            1. Performs initial webhook setup after startup delay
+            2. Periodically verifies webhook status with Telegram
+            3. Re-configures webhook if tunnel URL changes (for tunnel mode)
+            4. Updates the webhook status cache for fast health checks
+            """
+            raw_delay = os.environ.get("WEBHOOK_STARTUP_DELAY", "5")
+            try:
+                startup_delay = int(raw_delay)
+            except ValueError:
+                startup_delay = 5
+
+            if startup_delay > 0:
+                print(f"Waiting {startup_delay}s for services to initialize...", flush=True)
+                time.sleep(startup_delay)
+
+            # Initial setup
+            result = _auto_setup_webhook()
+            if result is False:
+                print("Warning: Webhook auto-setup failed - may need manual configuration", flush=True)
+                print("Manual setup: docker-compose exec bridge python bridge.py set-webhook --domain <your-domain>", flush=True)
+                _update_webhook_status_cache(configured=False, error="Initial auto-setup failed")
+            elif result is True:
+                _verify_and_update_webhook_status()
+
+            # Recovery loop settings
+            check_interval = 60  # Check every 60 seconds
+            max_backoff = 300  # Max 5 minutes between retries on failure
+            current_backoff = check_interval
+            last_tunnel_url = _read_text_file(_tunnel_url_file())
+            deployment_mode = os.environ.get("DEPLOYMENT_MODE", "").lower().strip()
+
+            while True:
+                time.sleep(current_backoff)
+
+                try:
+                    # Check if tunnel URL changed (tunnel mode only)
+                    if deployment_mode == "tunnel":
+                        current_tunnel_url = _read_text_file(_tunnel_url_file())
+                        if current_tunnel_url and current_tunnel_url != last_tunnel_url:
+                            print(f"Tunnel URL changed: {last_tunnel_url} -> {current_tunnel_url}", flush=True)
+                            last_tunnel_url = current_tunnel_url
+                            # Re-run auto-setup with new URL
+                            result = _auto_setup_webhook()
+                            if result:
+                                _verify_and_update_webhook_status()
+                                current_backoff = check_interval  # Reset backoff on success
+                            else:
+                                current_backoff = min(current_backoff * 2, max_backoff)
+                            continue
+
+                    # Periodic verification (all modes)
+                    is_configured = _verify_and_update_webhook_status()
+
+                    if not is_configured:
+                        # Webhook not configured, try to set it up
+                        print("Webhook not configured, attempting recovery...", flush=True)
+                        result = _auto_setup_webhook()
+                        if result:
+                            _verify_and_update_webhook_status()
+                            current_backoff = check_interval
+                        else:
+                            current_backoff = min(current_backoff * 2, max_backoff)
+                    else:
+                        current_backoff = check_interval  # Reset backoff on success
+
+                except Exception as e:
+                    print(f"Error in webhook recovery loop: {e}", flush=True)
+                    _update_webhook_status_cache(configured=False, error=str(e))
+                    current_backoff = min(current_backoff * 2, max_backoff)
+
+        threading.Thread(target=_webhook_recovery_loop, daemon=True).start()
+
         try:
-            HTTPServer((HOST, PORT), Handler).serve_forever()
+            server.serve_forever()
         except KeyboardInterrupt:
             print("\nStopped", flush=True)
         return 0
