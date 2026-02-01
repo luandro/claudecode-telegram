@@ -19,8 +19,10 @@ BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 PORT = int(os.environ.get("PORT", "8080"))
 # Default to localhost-only for security. Use 0.0.0.0 to bind all interfaces.
 HOST = os.environ.get("HOST", "127.0.0.1")
-# Generate a long random webhook path for security (32 bytes = 64 hex chars)
-WEBHOOK_PATH = os.environ.get("WEBHOOK_PATH", secrets.token_hex(32))
+# Generate a long random webhook path for security if not provided or empty
+WEBHOOK_PATH = os.environ.get("WEBHOOK_PATH", "").strip()
+if not WEBHOOK_PATH:
+    WEBHOOK_PATH = secrets.token_hex(32)
 # Secret token to validate requests are from Telegram (optional but recommended)
 # Set this in Telegram Bot API when setting webhook: ?secret_token=<YOUR_SECRET>
 TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
