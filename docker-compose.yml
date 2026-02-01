@@ -66,19 +66,11 @@ services:
     networks:
       - claude-telegram-net
     volumes:
-      # Share Claude config directory so cloudflared can publish its quick-tunnel URL
+      # Share Claude config directory so tunnel URL can be written by start script
       - ${CLAUDE_DIR:-${HOME}/.claude}:/claude:rw
     depends_on:
       bridge:
         condition: service_started
-    healthcheck:
-      # File-based healthcheck - cloudflared writes tunnel URL to this file when ready
-      # More reliable than wget/curl which may not exist in the cloudflared image
-      test: ["CMD", "test", "-f", "/claude/cloudflared_tunnel_url"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
     profiles:
       - tunnel
 

@@ -4,41 +4,9 @@
 
 set -e  # Exit on error
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Logging functions
-log_info() {
-    echo -e "${BLUE}ℹ ${NC}$1"
-}
-
-log_success() {
-    echo -e "${GREEN}✓${NC} $1"
-}
-
-log_warning() {
-    echo -e "${YELLOW}⚠${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}✗${NC} $1"
-}
-
-# Detect and use appropriate docker compose command
-docker_compose() {
-    if docker compose version &>/dev/null 2>&1; then
-        docker compose "$@"
-    elif command -v docker-compose &>/dev/null 2>&1; then
-        docker-compose "$@"
-    else
-        echo "Error: Neither 'docker compose' nor 'docker-compose' found" >&2
-        return 1
-    fi
-}
+# Source common functions for docker_compose
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/common.sh"
 
 # Check functions
 check_command() {
@@ -224,13 +192,13 @@ if docker_compose ps | grep -q "claudecode-telegram"; then
         log_warning "Containers exist but are not running"
         echo ""
         echo "Start containers:"
-        echo "  docker_compose up -d"
+        echo "  docker compose up -d"
     fi
 else
     log_warning "Docker stack not started"
     echo ""
     echo "Start Docker stack:"
-    echo "  docker_compose up -d"
+    echo "  docker compose up -d"
 fi
 
 echo ""
@@ -260,7 +228,7 @@ if docker_compose ps | grep -q "bridge.*Up"; then
             log_warning "Webhook not configured"
             echo ""
             echo "Set webhook:"
-            echo "  docker_compose exec bridge python bridge.py set-webhook --domain $DOMAIN"
+            echo "  docker compose exec bridge python bridge.py set-webhook --domain $DOMAIN"
         fi
     else
         log_error "Failed to get webhook info"
@@ -318,12 +286,8 @@ if [ "$CHECKS_PASSED" -eq "$CHECKS_TOTAL" ]; then
     log_success "All critical checks passed!"
     echo ""
     echo "Next steps:"
-    echo "  1. Run QA tests (see VERIFICATION_SUMMARY.md)"
-    echo "  2. Test DM from user 244055394"
-    echo "  3. Verify end-to-end message flow"
-    echo ""
-    echo "For detailed testing:"
-    echo "  RUN_DEPLOYMENT_CHECKS=1 pytest tests/test_https_connectivity.py -m integration"
+    echo "  1. Test DM from user 244055394"
+    echo "  2. Verify end-to-end message flow"
     exit 0
 else
     log_warning "Some checks failed. Review errors above."

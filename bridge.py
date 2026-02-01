@@ -272,8 +272,8 @@ def _is_valid_domain(domain: str) -> bool:
 def _get_cloudflared_tunnel_url_from_state(max_wait_seconds=60, poll_interval=2):
     """Get public URL for Cloudflare quick tunnels.
 
-    In Docker deployments, the `cloudflared` container writes the discovered URL
-    into a shared state file (in `CLAUDE_DIR`) that the bridge reads.
+    In Docker deployments, reads from a shared state file that the start script
+    writes after extracting the URL from cloudflared logs.
 
     Args:
         max_wait_seconds: Maximum time to wait for tunnel URL file
@@ -283,6 +283,7 @@ def _get_cloudflared_tunnel_url_from_state(max_wait_seconds=60, poll_interval=2)
         Tunnel URL string or None if not found within timeout
     """
     deadline = time.time() + max_wait_seconds
+
     while time.time() < deadline:
         tunnel_url = _read_text_file(_tunnel_url_file())
         if tunnel_url:

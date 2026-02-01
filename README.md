@@ -7,6 +7,7 @@ Telegram bot bridge for Claude Code. Send messages from Telegram, get responses 
 ## Table of Contents
 
 - [Background](#background)
+- [Quick Start (Tunnel Mode)](#quick-start-tunnel-mode)
 - [Install](#install)
 - [Usage](#usage)
 - [Configuration](#configuration)
@@ -30,6 +31,90 @@ flowchart LR
     D -->|Stop Hook| E[Read Transcript]
     E -->|Send Response| A
 ```
+
+## Quick Start (Tunnel Mode)
+
+The fastest way to get started is using tunnel mode with Docker Compose. No public IP or domain required.
+
+### Prerequisites
+
+- Docker and Docker Compose (V1 or V2)
+- A Telegram bot token from [@BotFather](https://t.me/BotFather)
+- Your Telegram user ID from [@userinfobot](https://t.me/userinfobot)
+
+### Setup
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/hanxiao/claudecode-telegram
+cd claudecode-telegram
+
+# 2. Configure environment
+cp .env.example .env
+nano .env  # Edit these values:
+```
+
+Required `.env` settings for tunnel mode:
+
+```bash
+TELEGRAM_BOT_TOKEN="your_bot_token_here"     # From @BotFather
+DM_ALLOWED_USER_ID="123456789"                # Your Telegram user ID
+DEPLOYMENT_MODE=tunnel                        # Use Cloudflare Tunnel
+```
+
+Optional settings (defaults work fine):
+
+```bash
+TMUX_SESSION=claude                           # tmux session name
+WEBHOOK_AUTO_SETUP=true                       # Auto-configure webhook
+TELEGRAM_REACTION_EMOJI=                      # Leave empty for thumbs up
+```
+
+### Start
+
+```bash
+# Start with Cloudflare Tunnel (one command)
+./start-tunnel.sh
+```
+
+That's it! The script will:
+
+- Create/start the tmux session
+- Build and start Docker containers
+- Automatically detect the tunnel URL and configure the Telegram webhook
+
+### Verify
+
+```bash
+# Check container status
+docker compose ps
+
+# View webhook info
+docker compose exec bridge python bridge.py get-webhook-info
+
+# Monitor logs
+docker compose logs -f bridge cloudflared
+```
+
+### Stop
+
+```bash
+docker compose --profile tunnel down
+```
+
+### Important Notes
+
+1. **Tunnel URLs change each restart**: Cloudflare quick tunnels generate a new random URL each time they start. The bridge automatically detects and updates the webhook when this happens.
+
+2. **tmux session required**: The bridge injects messages into Claude Code via tmux. Make sure Claude Code is running in the tmux session:
+
+   ```bash
+   tmux attach -t claude  # Attach to session
+   claude --dangerously-skip-permissions
+   # Press Ctrl+B then D to detach
+   ```
+
+3. **Port conflicts**: If port 8080 is in use, change `PORT` in `.env`.
 
 ## Install
 
@@ -225,11 +310,28 @@ curl -s http://localhost:8080/health | jq
 
 ## Docker Deployment (Caddy + HTTPS)
 
-This repo includes a Docker Compose stack with a Caddy reverse proxy for HTTPS.
+This repo includes a Docker Compose stack with two deployment modes:
+
+| Mode           | Description                    | Use Case                               |
+| -------------- | ------------------------------ | -------------------------------------- |
+| **Tunnel**     | Cloudflare quick tunnel        | Local development, no public IP needed |
+| **Production** | Caddy reverse proxy with HTTPS | Public deployment with your own domain |
 
 **Note:** All scripts and commands support both `docker compose` (V2, built into Docker Desktop) and `docker-compose` (V1, standalone plugin). The scripts automatically detect which version is available.
 
-### Prerequisites
+### Tunnel Mode (Recommended for Local Development)
+
+See [Quick Start (Tunnel Mode)](#quick-start-tunnel-mode) for full instructions.
+
+```bash
+./start-tunnel.sh
+```
+
+### Production Mode
+
+For production deployments with your own domain and Caddy HTTPS:
+
+#### Prerequisites
 
 ```bash
 # Ubuntu/Debian example
@@ -253,9 +355,16 @@ cp .env.example .env
 nano .env
 ```
 
-Set `HOST=0.0.0.0` in `.env` so the bridge binds to all interfaces inside the container.
+Required `.env` settings for production mode:
 
-2. Update your Caddyfile domain:
+```bash
+TELEGRAM_BOT_TOKEN="your_bot_token_here"     # From @BotFather
+DM_ALLOWED_USER_ID="123456789"                # Your Telegram user ID
+DEPLOYMENT_MODE=production                    # Use Caddy HTTPS
+WEBHOOK_DOMAIN=your-domain.com                # Your domain
+```
+
+2. Update your Caddyfile domain (if needed):
 
 ```caddyfile
 your-domain.com {
@@ -264,19 +373,10 @@ your-domain.com {
 }
 ```
 
-3. Verify tmux socket path if needed:
-
-```bash
-tmux display-message -p "#{socket_path}"
-# Set TMUX_SOCKET in .env if different
-```
-
 ### Start services
 
 ```bash
-docker compose up -d
-
-docker compose logs -f
+./start-production.sh
 ```
 
 The webhook will be automatically configured on startup. Check the logs to verify:
@@ -313,32 +413,6 @@ The `claudecode-telegram` entrypoint supports webhook management:
 - `delete-webhook`
 
 If no command is provided, the bridge server starts.
-
-## Testing
-
-### Install test dependencies
-
-```bash
-uv pip install -e ".[test]"
-```
-
-### Run tests
-
-```bash
-# Run all tests
-pytest
-
-# Only HTTPS connectivity tests
-pytest tests/test_https_connectivity.py
-
-# Deployment verification (network-dependent)
-RUN_DEPLOYMENT_CHECKS=1 pytest tests/test_https_connectivity.py -m integration
-
-# Custom domain
-DEPLOYMENT_DOMAIN=your-domain.com RUN_DEPLOYMENT_CHECKS=1 pytest tests/test_https_connectivity.py -m integration
-```
-
-Some tests require Docker or a running stack (see `tests/` for details).
 
 ## Deployment Verification
 

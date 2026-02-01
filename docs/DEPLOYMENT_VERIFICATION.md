@@ -254,7 +254,4 @@ docker compose restart bridge
 
 # Check actual Telegram webhook
 curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo" | jq '.'
-
-# Run HTTPS tests (production)
-RUN_DEPLOYMENT_CHECKS=1 pytest tests/test_https_connectivity.py -m integration -v
 ```

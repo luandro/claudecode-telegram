@@ -2,11 +2,20 @@
 # Claude Code Stop hook - sends response back to Telegram
 # Install: copy to ~/.claude/hooks/ and add to ~/.claude/settings.json
 
-TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-YOUR_BOT_TOKEN_HERE}"
-INPUT=$(cat)
-TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path')
 # Use CLAUDE_DIR if set, otherwise default to $HOME/.claude
 CLAUDE_DIR="${CLAUDE_DIR:-$HOME/.claude}"
+
+# Get bot token from environment, then from token file, then fallback
+if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ "$TELEGRAM_BOT_TOKEN" = "YOUR_BOT_TOKEN_HERE" ]; then
+    TOKEN_FILE="$CLAUDE_DIR/telegram_bot_token"
+    if [ -f "$TOKEN_FILE" ]; then
+        TELEGRAM_BOT_TOKEN=$(cat "$TOKEN_FILE")
+    else
+        TELEGRAM_BOT_TOKEN="YOUR_BOT_TOKEN_HERE"
+    fi
+fi
+INPUT=$(cat)
+TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path')
 CHAT_ID_FILE="$CLAUDE_DIR/telegram_chat_id"
 PENDING_FILE="$CLAUDE_DIR/telegram_pending"
 
@@ -22,10 +31,25 @@ CHAT_ID=$(cat "$CHAT_ID_FILE")
 LAST_USER_LINE=$(grep -n '"type":"user"' "$TRANSCRIPT_PATH" | tail -1 | cut -d: -f1)
 [ -z "$LAST_USER_LINE" ] && rm -f "$PENDING_FILE" && exit 0
 
+# Wait for assistant response to be written to transcript (with timeout)
+# The Stop hook can be triggered before the transcript is fully updated
+MAX_WAIT=10
+WAIT_COUNT=0
 TMPFILE=$(mktemp)
-tail -n "+$LAST_USER_LINE" "$TRANSCRIPT_PATH" | \
-  grep '"type":"assistant"' | \
-  jq -rs '[.[].message.content[] | select(.type == "text") | .text] | join("\n\n")' > "$TMPFILE" 2>/dev/null
+
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    tail -n "+$LAST_USER_LINE" "$TRANSCRIPT_PATH" | \
+      grep '"type":"assistant"' | \
+      jq -rs '[.[].message.content[] | select(.type == "text") | .text] | join("\n\n")' > "$TMPFILE" 2>/dev/null
+
+    # Check if we got content
+    if [ -s "$TMPFILE" ]; then
+        break
+    fi
+
+    WAIT_COUNT=$((WAIT_COUNT + 1))
+    sleep 0.5
+done
 
 [ ! -s "$TMPFILE" ] && rm -f "$TMPFILE" "$PENDING_FILE" && exit 0
 
