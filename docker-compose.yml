@@ -36,6 +36,7 @@ services:
     image: caddy:latest
     container_name: claudecode-telegram-caddy
     restart: unless-stopped
+    # Ports only exposed when USE_CLOUDFLARE_TUNNEL=false (production with public IP)
     ports:
       - "${CADDY_HTTP_PORT:-8081}:80"
       - "${CADDY_HTTPS_PORT:-8443}:443"
@@ -50,6 +51,20 @@ services:
       - claude-telegram-net
     depends_on:
       - bridge
+    profiles:
+      - production
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: claudecode-telegram-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://bridge:8080
+    networks:
+      - claude-telegram-net
+    depends_on:
+      - bridge
+    profiles:
+      - tunnel
 
 networks:
   claude-telegram-net:

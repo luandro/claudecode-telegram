@@ -12,6 +12,7 @@ WORKDIR /app
 
 # Copy project files
 COPY pyproject.toml bridge.py ./
+COPY hooks/ /app/hooks/
 
 # Install the package
 RUN pip install --no-cache-dir -e .
@@ -27,7 +28,7 @@ EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8080 || exit 1
+    CMD curl -f http://localhost:8080/health || exit 1
 
 # Run the bridge
 CMD ["python", "bridge.py"]

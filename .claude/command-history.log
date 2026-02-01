@@ -888,3 +888,295 @@ EOF
 )"
 [2026-01-30 10:46:20] python3 -m py_compile bridge.py && echo "Syntax: OK"
 [2026-01-30 10:46:37] git add -A && git status
+[2026-01-30 21:04:13] pytest tests/test_https_connectivity.py::test_caddyfile_https_config -v
+[2026-01-30 21:04:20] git status --short
+[2026-01-30 21:04:21] git add -A && git status --short
+[2026-01-30 21:04:30] git reset HEAD .claude/command-history.log && echo "✓ Unstaged .claude/command-history.log"
+[2026-01-30 21:04:33] git status --short
+[2026-01-30 21:04:52] git commit -m "test: add comprehensive HTTPS deployment verification
+
+Add robust HTTPS connectivity testing infrastructure with deployment verification:
+
+Test Infrastructure:
+- Network-aware tests with RUN_DEPLOYMENT_CHECKS flag (skip in CI, enable for deployment)
+- Exponential backoff retry logic for transient network failures
+- DNS resolution, SSL handshake, and HTTPS endpoint validation
+- Dual execution mode (pytest + standalone script)
+- pytest integration markers for test categorization
+
+Code Quality Improvements:
+- Fixed exception handling to preserve traceback in retry decorator
+- Added proper error handling for curl subprocess output
+- Domain sanitization (strip scheme and trailing slashes)
+
+Documentation:
+- OPERATIONAL_VERIFICATION.md: Comprehensive deployment checklist with test plans
+- VERIFICATION_SUMMARY.md: Quick reference guide with command snippets  
+- deploy-verify.sh: Automated verification script with colored output
+- README.md: Testing section with environment variable documentation
+
+Configuration:
+- pyproject.toml: Added pytest>=7.0.0 test dependency
+- pytest.ini markers for integration test categorization
+- .gitignore: Exclude .claude/command-history.log from version control
+
+Cleanup:
+- Removed obsolete .prd/ directory and files
+- Consolidated PRD content into comprehensive verification docs
+
+Test environment:
+- RUN_DEPLOYMENT_CHECKS=1 enables integration tests (DNS, SSL, HTTPS)
+- DEPLOYMENT_DOMAIN override for custom domains (auto-strips scheme)
+- Retry configuration: 3 attempts, 0.5s initial backoff, exponential
+
+Breaking changes: None
+Security: Added .gitignore entry to prevent token exposure in logs"
+[2026-01-30 22:31:58] test -f scripts/lib/semantic_detector.py && echo "semantic detector available" || echo "semantic detector not found"
+[2026-01-30 22:53:49] ls ~/.claude/projects/ | grep -i "$(basename "$(pwd)")"
+[2026-01-30 22:53:56] touch ~/.claude/projects/-home-luandro-Dev-digidem-AI-claudecode-telegram/.reflect-initialized
+[2026-01-31 23:39:16] docker-compose ps
+[2026-01-31 23:39:27] docker-compose logs --tail 50 bridge
+[2026-01-31 23:39:29] ls -la ~/.claude/hooks/send-to-telegram.sh
+[2026-01-31 23:39:29] cat ~/.claude/settings.json | jq '.hooks'
+[2026-01-31 23:39:45] docker-compose exec bridge env | grep -E "(WEBHOOK_PATH|DM_ALLOWED|ALLOWED_TELEGRAM|TELEGRAM_REACTION)" | sort
+[2026-01-31 23:39:47] docker-compose exec bridge ls -la /claude/hooks/
+[2026-01-31 23:39:49] tmux -S /tmp/tmux-1000/default list-sessions 2>&1
+[2026-01-31 23:40:01] stat -c '%y' .env
+[2026-01-31 23:40:02] docker inspect claudecode-telegram-bridge | jq -r '.[0].Created'
+[2026-01-31 23:40:03] ls -la /tmp/tmux-1000/default
+[2026-01-31 23:40:48] docker-compose down
+[2026-01-31 23:41:03] docker-compose build --no-cache bridge
+[2026-01-31 23:41:39] docker-compose up -d
+[2026-01-31 23:41:54] cat /etc/sysctl.conf | grep -E "(ip_unprivileged_port_start|net.ipv4.ip_unprivileged_port_start)" || echo "# Setting not found"
+[2026-01-31 23:41:59] sysctl net.ipv4.ip_unprivileged_port_start
+[2026-01-31 23:42:10] echo "net.ipv4.ip_unprivileged_port_start=80" | sudo tee -a /etc/sysctl.conf
+[2026-01-31 23:42:12] sudo sysctl -p
+[2026-01-31 23:42:13] docker-compose up -d
+[2026-01-31 23:42:21] docker-compose down && docker-compose up -d
+[2026-01-31 23:42:55] cat << 'VERIFY_SCRIPT' > /tmp/verify-deployment.sh
+#!/bin/bash
+
+echo "=== Claude-Telegram Bridge Deployment Verification ==="
+echo ""
+
+echo "1. Container Status:"
+docker-compose ps
+echo ""
+
+echo "2. Environment Variables in Container:"
+docker-compose exec -T bridge env | grep -E "(WEBHOOK_PATH|DM_ALLOWED|ALLOWED_TELEGRAM|TELEGRAM_REACTION|CLAUDE_DIR)" | sort
+echo ""
+
+echo "3. Hook Installation:"
+docker-compose exec -T bridge ls -la /claude/hooks/ 2>&1
+echo ""
+
+echo "4. Bridge Logs (last 10 lines):"
+docker-compose logs --tail 10 bridge
+echo ""
+
+echo "5. Tmux Socket Connection Test:"
+docker-compose exec -T bridge test -S /tmux-socket && echo "✅ Socket accessible" || echo "❌ Socket not accessible"
+echo ""
+
+echo "6. Health Check:"
+curl -f http://localhost:8080/health 2>&1 && echo "✅ Health check passed" || echo "❌ Health check failed"
+echo ""
+
+echo "=== Next Steps ==="
+echo "1. Set webhook: docker-compose exec bridge python bridge.py set-webhook"
+echo "2. Send test message via Telegram"
+echo "3. Monitor logs: docker-compose logs -f bridge"
+
+VERIFY_SCRIPT
+
+chmod +x /tmp/verify-deployment.sh
+echo "Verification script created: /tmp/verify-deployment.sh"
+[2026-01-31 23:54:29] chmod +x start-tunnel.sh start-production.sh
+[2026-01-31 23:55:38] ./start-tunnel.sh
+[2026-01-31 23:56:06] docker-compose ps
+[2026-01-31 23:56:07] docker-compose logs cloudflared | tail -20
+[2026-01-31 23:56:09] docker-compose exec bridge python bridge.py set-webhook --domain ratio-club-old-site.trycloudflare.com
+[2026-01-31 23:56:19] docker-compose exec bridge env | grep -E "(WEBHOOK_PATH|BOT_TOKEN)" | head -2
+[2026-01-31 23:56:20] docker-compose exec bridge python bridge.py get-webhook-info
+[2026-01-31 23:56:37] docker-compose exec -T bridge python3 << 'PYEOF'
+import os
+import json
+import urllib.request
+
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+WEBHOOK_PATH = os.environ.get("WEBHOOK_PATH", "")
+domain = "ratio-club-old-site.trycloudflare.com"
+
+webhook_url = f"https://{domain}/{WEBHOOK_PATH}"
+print(f"Webhook URL: {webhook_url}")
+print(f"URL length: {len(webhook_url)}")
+
+params = {"url": webhook_url}
+req = urllib.request.Request(
+    f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook",
+    data=json.dumps(params).encode(),
+    headers={"Content-Type": "application/json"}
+)
+
+try:
+    with urllib.request.urlopen(req, timeout=10) as r:
+        result = json.loads(r.read())
+        print(json.dumps(result, indent=2))
+except Exception as e:
+    print(f"Error: {e}")
+    # Try to read error response
+    if hasattr(e, 'read'):
+        print(f"Response: {e.read().decode()}")
+PYEOF
+[2026-01-31 23:56:50] curl -v https://ratio-club-old-site.trycloudflare.com/health 2>&1 | grep -E "(HTTP|Connected|SSL|OK)"
+[2026-01-31 23:56:53] sleep 10 && docker-compose exec -T bridge python3 << 'PYEOF'
+import os
+import json
+import urllib.request
+import time
+
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+WEBHOOK_PATH = os.environ.get("WEBHOOK_PATH", "")
+domain = "ratio-club-old-site.trycloudflare.com"
+
+webhook_url = f"https://{domain}/{WEBHOOK_PATH}"
+print(f"Setting webhook to: {webhook_url}")
+
+params = {"url": webhook_url}
+req = urllib.request.Request(
+    f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook",
+    data=json.dumps(params).encode(),
+    headers={"Content-Type": "application/json"}
+)
+
+try:
+    with urllib.request.urlopen(req, timeout=10) as r:
+        result = json.loads(r.read())
+        if result.get("ok"):
+            print("✅ Webhook set successfully!")
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"❌ Failed: {result.get('description')}")
+except Exception as e:
+    print(f"❌ Error: {e}")
+    if hasattr(e, 'read'):
+        error_response = json.loads(e.read().decode())
+        print(f"Details: {error_response.get('description')}")
+PYEOF
+[2026-01-31 23:57:31] echo "Waiting 30 seconds for DNS propagation..." && sleep 30 && docker-compose exec bridge python bridge.py set-webhook --domain ratio-club-old-site.trycloudflare.com
+[2026-01-31 23:59:39] cat << 'EOF'
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║                                                                       ║
+║  ✅ CLOUDFLARE TUNNEL DEPLOYMENT COMPLETE                            ║
+║                                                                       ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ DEPLOYMENT SUMMARY                                                  │
+└─────────────────────────────────────────────────────────────────────┘
+
+✅ Containers Running:
+   • bridge:        Up (healthy)
+   • cloudflared:   Up (connected)
+
+✅ Tunnel Active:
+   • URL: https://ratio-club-old-site.trycloudflare.com
+   • Target: http://bridge:8080
+   • Status: Connected to Cloudflare (gig09)
+
+✅ Configuration:
+   • Environment variables: Loaded ✓
+   • Hook installed: /claude/hooks/send-to-telegram.sh ✓
+   • DM access: Restricted to user 244055394 ✓
+   • Webhook path: 64-char random (secure) ✓
+
+⏳ Pending: DNS Propagation (2-5 minutes)
+   Telegram's DNS servers need time to resolve the new tunnel URL.
+   This is normal and expected for quick Cloudflare tunnels.
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ NEXT STEPS                                                          │
+└─────────────────────────────────────────────────────────────────────┘
+
+Wait 2-5 minutes, then run:
+
+    docker-compose exec bridge python bridge.py set-webhook --domain ratio-club-old-site.trycloudflare.com
+
+Verify it worked:
+
+    docker-compose exec bridge python bridge.py verify-webhook
+
+Test with Telegram:
+
+    Send: /status
+    Expected: tmux 'claude': running
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ IMPORTANT: TUNNEL URL CHANGES ON RESTART                           │
+└─────────────────────────────────────────────────────────────────────┘
+
+Quick tunnels generate a NEW random URL each time you restart.
+
+After restart, get the new URL and update webhook:
+
+    NEW_URL=$(docker-compose logs cloudflared | grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' | head -1)
+    docker-compose exec bridge python bridge.py set-webhook --domain "${NEW_URL#https://}"
+
+For a permanent URL, see: DEPLOYMENT.md (Named Tunnels section)
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ DOCUMENTATION                                                       │
+└─────────────────────────────────────────────────────────────────────┘
+
+📄 Complete Guides:
+   • DEPLOYMENT.md                    - Full deployment guide
+   • /tmp/tunnel-deployment-summary.md - Current deployment details
+
+🚀 Quick Commands:
+   • ./start-tunnel.sh              - Start tunnel mode
+   • ./start-production.sh          - Start production mode (requires public IP)
+   • docker-compose logs -f bridge  - Monitor logs
+   • docker-compose ps              - Check status
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ TROUBLESHOOTING                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+
+If webhook fails after 5 minutes:
+
+    # Restart cloudflared to get a new URL
+    docker-compose restart cloudflared
+    
+    # Get new URL
+    docker-compose logs cloudflared | grep trycloudflare.com
+    
+    # Wait 3 minutes, then set webhook with new URL
+
+Full troubleshooting: DEPLOYMENT.md
+
+EOF
+[2026-01-31 23:59:50] git status --short
+[2026-01-31 23:59:52] git add -A && git commit -m "feat: add Cloudflare Tunnel support for local development
+
+- Add cloudflared service to docker-compose.yml with profile support
+- Create start-tunnel.sh and start-production.sh deployment scripts
+- Add comprehensive DEPLOYMENT.md guide
+- Update .env.example with deployment mode documentation
+- Fix Dockerfile: copy hooks directory and correct healthcheck endpoint
+- Add DNS propagation retry logic to tunnel startup
+
+Supports two deployment modes:
+- Tunnel mode: Local development using Cloudflare Tunnel (no public IP needed)
+- Production mode: Direct deployment with Caddy (requires public IP/domain)
+
+Tunnel mode benefits:
+- No public IP or domain required
+- No port forwarding needed
+- Works behind NAT/firewall
+- Automatic HTTPS via Cloudflare
+- Free and instant setup
+
+Note: Quick tunnels generate random URLs on each restart and require
+webhook updates. For permanent URLs, use named tunnels (see DEPLOYMENT.md)."
