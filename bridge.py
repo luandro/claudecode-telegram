@@ -52,12 +52,14 @@ if _dm_allowed:
         print(f"Warning: Invalid DM_ALLOWED_USER_ID format: {_dm_allowed}")
 
 # Configure reaction emoji with validation
-_REACTION_EMOJI_RAW = os.environ.get("TELEGRAM_REACTION_EMOJI", "\U0001f44d")  # Default: 👍 (thumbs up)
-# Strip whitespace first, then allow explicit disable with "none", "false", "0", or empty string
-_REACTION_EMOJI_STRIPPED = _REACTION_EMOJI_RAW.strip()
-_REACTION_EMOJI_CANDIDATE = None if not _REACTION_EMOJI_STRIPPED or _REACTION_EMOJI_STRIPPED.lower() in ("none", "false", "0") else _REACTION_EMOJI_STRIPPED
-# Basic validation: emoji should be reasonable length (1-10 chars) to prevent abuse
-REACTION_EMOJI = _REACTION_EMOJI_CANDIDATE if _REACTION_EMOJI_CANDIDATE and len(_REACTION_EMOJI_CANDIDATE) <= 10 else None
+_REACTION_EMOJI_RAW = os.environ.get("TELEGRAM_REACTION_EMOJI", "").strip()
+if not _REACTION_EMOJI_RAW:
+    REACTION_EMOJI = "\U0001f44d"  # Default: 👍
+elif _REACTION_EMOJI_RAW.lower() in ("none", "false", "0"):
+    REACTION_EMOJI = None
+else:
+    # Basic validation: emoji should be reasonable length (1-10 chars) to prevent abuse
+    REACTION_EMOJI = _REACTION_EMOJI_RAW if len(_REACTION_EMOJI_RAW) <= 10 else None
 
 # Optional tmux socket path (useful when running in Docker with mounted socket)
 TMUX_SOCKET_PATH = os.environ.get("TMUX_SOCKET_PATH", "")
@@ -231,6 +233,25 @@ def tmux_send_enter():
 
 def tmux_send_escape():
     subprocess.run(_get_tmux_cmd(["send-keys", "-t", TMUX_SESSION, "Escape"]))
+
+
+def _setup_hooks():
+    """Automatically install the Claude hook if it doesn't exist."""
+    hooks_dir = os.path.join(CLAUDE_DIR, "hooks")
+    os.makedirs(hooks_dir, exist_ok=True)
+    
+    hook_dest = os.path.join(hooks_dir, "send-to-telegram.sh")
+    hook_src = os.path.join(os.path.dirname(__file__), "hooks", "send-to-telegram.sh")
+    
+    # If source exists and destination doesn't, or if we want to ensure it's up to date
+    if os.path.exists(hook_src):
+        import shutil
+        print(f"Installing hook to {hook_dest}", flush=True)
+        shutil.copy2(hook_src, hook_dest)
+        os.chmod(hook_dest, 0o755)
+    else:
+        # Fallback if running from installed package where hooks/ might be elsewhere
+        print(f"Warning: Could not find hook source at {hook_src}", flush=True)
 
 
 def get_recent_sessions(limit=5):
@@ -576,6 +597,7 @@ def main():
         return 0 if delete_webhook() else 1
     else:
         # Default: run server (backward compatible)
+        _setup_hooks()
         setup_bot_commands()
         print(f"Bridge on {HOST}:{PORT}/{WEBHOOK_PATH} | tmux: {TMUX_SESSION}", flush=True)
         try:

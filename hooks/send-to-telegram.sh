@@ -5,8 +5,10 @@
 TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-YOUR_BOT_TOKEN_HERE}"
 INPUT=$(cat)
 TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path')
-CHAT_ID_FILE=~/.claude/telegram_chat_id
-PENDING_FILE=~/.claude/telegram_pending
+# Use CLAUDE_DIR if set, otherwise default to $HOME/.claude
+CLAUDE_DIR="${CLAUDE_DIR:-$HOME/.claude}"
+CHAT_ID_FILE="$CLAUDE_DIR/telegram_chat_id"
+PENDING_FILE="$CLAUDE_DIR/telegram_pending"
 
 # Only respond to Telegram-initiated messages
 [ ! -f "$PENDING_FILE" ] && exit 0
