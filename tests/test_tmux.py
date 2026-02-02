@@ -444,3 +444,153 @@ class TestTmuxController:
         controller = TmuxController(session="claude")
         with pytest.raises(RuntimeError, match="Failed to send Escape"):
             controller.exit_and_run("claude --continue")
+
+    # Tests for extract_response method
+
+    @patch.object(TmuxController, 'capture_pane')
+    def test_extract_response_no_output(self, mock_capture):
+        """Test extract_response() returns None when no output captured."""
+        mock_capture.return_value = None
+        controller = TmuxController(session="claude")
+        assert controller.extract_response() is None
+
+    @patch.object(TmuxController, 'capture_pane')
+    def test_extract_response_no_prompt(self, mock_capture):
+        """Test extract_response() returns None when no user prompt found."""
+        mock_capture.return_value = "some output\nwithout prompt\nmore output"
+        controller = TmuxController(session="claude")
+        assert controller.extract_response() is None
+
+    @patch.object(TmuxController, 'capture_pane')
+    def test_extract_response_basic(self, mock_capture):
+        """Test extract_response() extracts response after user prompt."""
+        mock_capture.return_value = "> user message\nClaude's response here\nmore response"
+        controller = TmuxController(session="claude")
+        response = controller.extract_response()
+        assert response == "Claude's response here\nmore response"
+
+    @patch.object(TmuxController, 'capture_pane')
+    def test_extract_response_with_arrow_prompt(self, mock_capture):
+        """Test extract_response() works with arrow prompt (❯)."""
+        mock_capture.return_value = "❯ user message\nClaude's response"
+        controller = TmuxController(session="claude")
+        response = controller.extract_response()
+        assert response == "Claude's response"
+
+    @patch.object(TmuxController, 'capture_pane')
+    def test_extract_response_with_dollar_prompt(self, mock_capture):
+        """Test extract_response() works with dollar prompt ($)."""
+        mock_capture.return_value = "$ user message\nClaude's response"
+        controller = TmuxController(session="claude")
+        response = controller.extract_response()
+        assert response == "Claude's response"
+
+    @patch.object(TmuxController, 'capture_pane')
+    def test_extract_response_stops_at_next_prompt(self, mock_capture):
+        """Test extract_response() stops at next user prompt."""
+        mock_capture.return_value = "> first message\nfirst response\n> second message\nsecond response"
+        controller = TmuxController(session="claude")
+        response = controller.extract_response()
+        # Should only get response to second message (last prompt)
+        assert response == "second response"
+
+    @patch.object(TmuxController, 'capture_pane')
+    def test_extract_response_filters_spinner_lines(self, mock_capture):
+        """Test extract_response() filters out spinner characters."""
+        mock_capture.return_value = "> user message\n  ⠋ Loading\nClaude's response\n  ⠙ Processing"
+        controller = TmuxController(session="claude")
+        response = controller.extract_response()
+        assert response == "Claude's response"
+
+    @patch.object(TmuxController, 'capture_pane')
+    def test_extract_response_filters_tree_lines(self, mock_capture):
+        """Test extract_response() filters out tree characters."""
+        mock_capture.return_value = "> user message\n├ branch\n│ Tool: Read\nClaude's response\n└ end"
+        controller = TmuxController(session="claude")
+        response = controller.extract_response()
+        assert response == "Claude's response"
+
+    @patch.object(TmuxController, 'capture_pane')
+    def test_extract_response_filters_tool_lines(self, mock_capture):
+        """Test extract_response() filters out tool status lines."""
+        mock_capture.return_value = (
+            "> user message\n"
+            "│ Tool: Read file.py\n"
+            "│ Read completed\n"
+            "Claude's response\n"
+            "│ Tool: Write output.txt\n"
+            "│ Edit running\n"
+            "│ Bash completed"
+        )
+        controller = TmuxController(session="claude")
+        response = controller.extract_response()
+        assert response == "Claude's response"
+
+    @patch.object(TmuxController, 'capture_pane')
+    def test_extract_response_skips_leading_empty_lines(self, mock_capture):
+        """Test extract_response() skips empty lines at start of response."""
+        mock_capture.return_value = "> user message\n\n\nClaude's response"
+        controller = TmuxController(session="claude")
+        response = controller.extract_response()
+        assert response == "Claude's response"
+
+    @patch.object(TmuxController, 'capture_pane')
+    def test_extract_response_removes_ansi_codes(self, mock_capture):
+        """Test extract_response() removes ANSI escape codes."""
+        mock_capture.return_value = "> user message\n\x1b[32mGreen text\x1b[0m normal text"
+        controller = TmuxController(session="claude")
+        response = controller.extract_response()
+        assert response == "Green text normal text"
+
+    @patch.object(TmuxController, 'capture_pane')
+    def test_extract_response_strips_whitespace(self, mock_capture):
+        """Test extract_response() strips leading/trailing whitespace."""
+        mock_capture.return_value = "> user message\n   Claude's response   \n  "
+        controller = TmuxController(session="claude")
+        response = controller.extract_response()
+        assert response == "Claude's response"
+
+    @patch.object(TmuxController, 'capture_pane')
+    def test_extract_response_empty_after_cleanup(self, mock_capture):
+        """Test extract_response() returns None if response is empty after cleanup."""
+        mock_capture.return_value = "> user message\n   \n  \n"
+        controller = TmuxController(session="claude")
+        assert controller.extract_response() is None
+
+    @patch.object(TmuxController, 'capture_pane')
+    def test_extract_response_complex_scenario(self, mock_capture):
+        """Test extract_response() with complex realistic scenario."""
+        mock_capture.return_value = (
+            "Previous output\n"
+            "> old message\n"
+            "old response\n"
+            "> current message\n"
+            "\n"
+            "  ⠋ Thinking\n"
+            "├ Tools\n"
+            "│ Tool: Read\n"
+            "│ Read completed\n"
+            "\x1b[32mFormatted response\x1b[0m\n"
+            "More response text\n"
+            "  │ running analysis\n"
+            "Final response line\n"
+            "└ end\n"
+        )
+        controller = TmuxController(session="claude")
+        response = controller.extract_response()
+        assert response == "Formatted response\nMore response text\nFinal response line"
+
+    @patch.object(TmuxController, 'capture_pane')
+    def test_extract_response_multiline_with_preserving_content(self, mock_capture):
+        """Test extract_response() preserves meaningful content across multiple lines."""
+        mock_capture.return_value = (
+            "> user message\n"
+            "Line 1 of response\n"
+            "Line 2 of response\n"
+            "\n"
+            "Line 4 after blank\n"
+            "Line 5"
+        )
+        controller = TmuxController(session="claude")
+        response = controller.extract_response()
+        assert response == "Line 1 of response\nLine 2 of response\n\nLine 4 after blank\nLine 5"

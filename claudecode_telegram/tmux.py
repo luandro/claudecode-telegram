@@ -6,6 +6,7 @@ for sending Telegram messages to the running Claude Code instance.
 """
 
 import logging
+import re
 import subprocess
 import time
 from typing import Optional
@@ -300,3 +301,86 @@ class TmuxController:
         self.send_keys(command, literal=True)
         self.send_enter()
         logger.debug(f"Exited and ran command in '{self.session}': {command[:50]}{'...' if len(command) > 50 else ''}")
+
+    def extract_response(self) -> Optional[str]:
+        """
+        Extract Claude's response from the tmux pane.
+
+        Captures the last 100 lines from the pane, finds the last user prompt,
+        and extracts everything after it until the next prompt or end of output.
+        Filters out tool/status lines and ANSI codes.
+
+        This ports the AWK logic from hooks/send-to-telegram.sh to Python.
+
+        Returns:
+            Extracted response text, or None if no response found
+        """
+        # Capture pane content
+        raw_output = self.capture_pane(lines=100)
+        if not raw_output:
+            logger.debug("No output captured from tmux pane")
+            return None
+
+        lines = raw_output.split('\n')
+        logger.debug(f"Captured {len(lines)} lines from tmux pane")
+
+        # Find the last user prompt line (starts with >, ❯, or $)
+        last_prompt_idx = -1
+        for i, line in enumerate(lines):
+            if line.startswith('> ') or line.startswith('❯ ') or line.startswith('$ '):
+                last_prompt_idx = i
+
+        if last_prompt_idx == -1:
+            logger.debug("No user prompt found in captured output")
+            return None
+
+        logger.debug(f"Last prompt found at line {last_prompt_idx}")
+
+        # Extract everything after the last prompt
+        response_lines = []
+        in_response = False
+
+        for i in range(last_prompt_idx + 1, len(lines)):
+            line = lines[i]
+
+            # Stop if we hit another prompt
+            if line.startswith('> ') or line.startswith('❯ ') or line.startswith('$ '):
+                break
+
+            # Skip tool/status lines (spinner chars, tree chars, tool names)
+            # Spinner chars: ⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏
+            if re.match(r'^\s*[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]', line):
+                continue
+            if re.match(r'^\s*├', line):
+                continue
+            if re.match(r'^\s*│.*(Tool|Read|Write|Edit|Bash|running|completed)', line):
+                continue
+            if re.match(r'^\s*└', line):
+                continue
+
+            # Skip empty lines at the start
+            if not in_response and not line.strip():
+                continue
+
+            in_response = True
+            response_lines.append(line)
+
+        if not response_lines:
+            logger.debug("No response content found after prompt")
+            return None
+
+        # Join lines and clean up
+        response = '\n'.join(response_lines)
+
+        # Remove ANSI escape codes
+        response = re.sub(r'\x1b\[[0-9;]*m', '', response)
+
+        # Remove leading/trailing whitespace
+        response = response.strip()
+
+        if not response:
+            logger.debug("Response was empty after cleanup")
+            return None
+
+        logger.debug(f"Extracted {len(response)} chars response")
+        return response
