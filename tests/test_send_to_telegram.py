@@ -16,6 +16,8 @@ from send_to_telegram import (
     extract_from_tmux,
     format_for_telegram,
     get_bot_token,
+    main,
+    parse_arguments,
     send_message,
 )
 
@@ -325,6 +327,207 @@ class TestSendMessage:
                 if len(calls) >= 2:
                     second_call_data = json.loads(calls[1][0][1].decode())
                     assert len(second_call_data["text"]) <= 4096
+
+
+class TestParseArguments:
+    """Tests for parse_arguments function."""
+
+    def test_parses_transcript_path(self):
+        """Should parse --transcript argument."""
+        args = parse_arguments(["--transcript", "/path/to/transcript.jsonl"])
+        assert args.transcript == Path("/path/to/transcript.jsonl")
+
+    def test_defaults_to_none(self):
+        """Should default transcript to None."""
+        args = parse_arguments([])
+        assert args.transcript is None
+
+    def test_handles_help(self):
+        """Should handle --help argument."""
+        with pytest.raises(SystemExit) as exc_info:
+            parse_arguments(["--help"])
+        assert exc_info.value.code == 0
+
+
+class TestMain:
+    """Tests for main function."""
+
+    def test_standalone_mode_with_transcript(self, tmp_path):
+        """Should work in standalone mode with --transcript flag."""
+        # Set up test environment
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir()
+
+        transcript = tmp_path / "transcript.jsonl"
+        transcript.write_text(
+            '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Hello"}]}}\n'
+            '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Response"}]}}\n'
+        )
+
+        # Set up state files
+        (claude_dir / "telegram_pending").write_text(str(int(time.time())))
+        (claude_dir / "telegram_chat_id").write_text("12345")
+        (claude_dir / "telegram_bot_token").write_text("test_token")
+
+        with patch.dict("os.environ", {"CLAUDE_DIR": str(claude_dir)}):
+            with patch("urllib.request.urlopen") as mock_urlopen:
+                mock_response = Mock()
+                mock_response.read.return_value = json.dumps({"ok": True}).encode()
+                mock_urlopen.return_value.__enter__.return_value = mock_response
+
+                exit_code = main(["--transcript", str(transcript)])
+
+                assert exit_code == 0
+
+    def test_hook_mode_with_stdin(self, tmp_path):
+        """Should work in hook mode reading from stdin."""
+        # Set up test environment
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir()
+
+        transcript = tmp_path / "transcript.jsonl"
+        transcript.write_text(
+            '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Hello"}]}}\n'
+            '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Response"}]}}\n'
+        )
+
+        # Set up state files
+        (claude_dir / "telegram_pending").write_text(str(int(time.time())))
+        (claude_dir / "telegram_chat_id").write_text("12345")
+        (claude_dir / "telegram_bot_token").write_text("test_token")
+
+        hook_data = json.dumps({"transcript_path": str(transcript)})
+
+        with patch.dict("os.environ", {"CLAUDE_DIR": str(claude_dir)}):
+            with patch("sys.stdin") as mock_stdin:
+                mock_stdin.read.return_value = hook_data
+                mock_stdin.isatty.return_value = False
+
+                with patch("urllib.request.urlopen") as mock_urlopen:
+                    mock_response = Mock()
+                    mock_response.read.return_value = json.dumps({"ok": True}).encode()
+                    mock_urlopen.return_value.__enter__.return_value = mock_response
+
+                    exit_code = main([])
+
+                    assert exit_code == 0
+
+    def test_exits_when_no_pending_file(self, tmp_path):
+        """Should exit early when no pending file exists."""
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir()
+
+        transcript = tmp_path / "transcript.jsonl"
+        transcript.write_text(
+            '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Hello"}]}}\n'
+        )
+
+        with patch.dict("os.environ", {"CLAUDE_DIR": str(claude_dir)}):
+            exit_code = main(["--transcript", str(transcript)])
+            assert exit_code == 0  # Should exit gracefully
+
+    def test_handles_expired_pending_file(self, tmp_path):
+        """Should clean up expired pending file."""
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir()
+
+        transcript = tmp_path / "transcript.jsonl"
+        transcript.write_text(
+            '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Hello"}]}}\n'
+        )
+
+        # Create expired pending file (11 minutes ago)
+        expired_time = int(time.time()) - 660
+        pending_file = claude_dir / "telegram_pending"
+        pending_file.write_text(str(expired_time))
+
+        with patch.dict("os.environ", {"CLAUDE_DIR": str(claude_dir)}):
+            exit_code = main(["--transcript", str(transcript)])
+            assert exit_code == 0
+            assert not pending_file.exists()
+
+    def test_handles_missing_bot_token(self, tmp_path):
+        """Should exit when bot token not configured."""
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir()
+
+        transcript = tmp_path / "transcript.jsonl"
+        transcript.write_text(
+            '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Hello"}]}}\n'
+        )
+
+        (claude_dir / "telegram_pending").write_text(str(int(time.time())))
+        (claude_dir / "telegram_chat_id").write_text("12345")
+
+        with patch.dict("os.environ", {"CLAUDE_DIR": str(claude_dir)}, clear=True):
+            exit_code = main(["--transcript", str(transcript)])
+            assert exit_code == 0  # Should exit gracefully
+
+    def test_handles_import_error_gracefully(self, tmp_path):
+        """Should continue without tmux when import fails."""
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir()
+
+        transcript = tmp_path / "transcript.jsonl"
+        transcript.write_text(
+            '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Hello"}]}}\n'
+            '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Response"}]}}\n'
+        )
+
+        (claude_dir / "telegram_pending").write_text(str(int(time.time())))
+        (claude_dir / "telegram_chat_id").write_text("12345")
+        (claude_dir / "telegram_bot_token").write_text("test_token")
+
+        with patch.dict("os.environ", {"CLAUDE_DIR": str(claude_dir)}):
+            # Remove claudecode_telegram from sys.modules to simulate import failure
+            import sys
+            sys_modules_backup = sys.modules.copy()
+
+            # Remove any cached imports
+            for key in list(sys.modules.keys()):
+                if "claudecode_telegram" in key:
+                    del sys.modules[key]
+
+            try:
+                with patch("urllib.request.urlopen") as mock_urlopen:
+                    mock_response = Mock()
+                    mock_response.read.return_value = json.dumps({"ok": True}).encode()
+                    mock_urlopen.return_value.__enter__.return_value = mock_response
+
+                    exit_code = main(["--transcript", str(transcript)])
+
+                    # Should still succeed using transcript
+                    assert exit_code == 0
+            finally:
+                # Restore sys.modules
+                sys.modules.update(sys_modules_backup)
+
+    def test_requires_transcript_path(self, tmp_path):
+        """Should fail when no transcript path and stdin is a terminal."""
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir()
+
+        with patch.dict("os.environ", {"CLAUDE_DIR": str(claude_dir)}):
+            with patch("sys.stdin") as mock_stdin:
+                mock_stdin.isatty.return_value = True
+
+                exit_code = main([])
+
+                assert exit_code == 1
+
+    def test_handles_invalid_json_stdin(self, tmp_path):
+        """Should handle invalid JSON from stdin."""
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir()
+
+        with patch.dict("os.environ", {"CLAUDE_DIR": str(claude_dir)}):
+            with patch("sys.stdin") as mock_stdin:
+                mock_stdin.read.return_value = "invalid json"
+                mock_stdin.isatty.return_value = False
+
+                exit_code = main([])
+
+                assert exit_code == 1
 
 
 if __name__ == "__main__":

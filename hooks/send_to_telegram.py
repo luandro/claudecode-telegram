@@ -3,8 +3,17 @@
 
 This Python script replaces the bash hook, combining transcript parsing
 with tmux capture fallback for reliable message delivery.
+
+Usage:
+    As a hook (stdin):    cat hook_data.json | ./send_to_telegram.py
+    Standalone mode:      ./send_to_telegram.py [options]
+
+Arguments:
+    --transcript PATH     Path to transcript file
+    --help               Show this help message
 """
 
+import argparse
 import json
 import logging
 import os
@@ -124,7 +133,7 @@ def extract_from_transcript(transcript_path: Path, max_wait: int = 15) -> Option
     return None
 
 
-def extract_from_tmux(tmux: "TmuxController") -> Optional[str]:
+def extract_from_tmux(tmux) -> Optional[str]:
     """
     Extract response from tmux pane capture.
 
@@ -136,6 +145,44 @@ def extract_from_tmux(tmux: "TmuxController") -> Optional[str]:
     """
     # Use the TmuxController's extract_response method
     return tmux.extract_response()
+
+
+def parse_arguments(args: list[str]) -> argparse.Namespace:
+    """
+    Parse command line arguments.
+
+    Args:
+        args: Command line arguments (excluding program name)
+
+    Returns:
+        Parsed arguments namespace
+    """
+    parser = argparse.ArgumentParser(
+        description="Claude Code Stop hook - sends response back to Telegram",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # As a hook (stdin):
+  cat hook_data.json | ./send_to_telegram.py
+
+  # Standalone with transcript path:
+  ./send_to_telegram.py --transcript /path/to/transcript.jsonl
+
+Environment Variables:
+  TELEGRAM_BOT_TOKEN    Bot token (overrides token file)
+  CLAUDE_DIR            Claude directory (default: ~/.claude)
+  TMUX_SESSION          Tmux session name (default: claude)
+  TMUX_SOCKET_PATH      Optional tmux socket path
+        """
+    )
+
+    parser.add_argument(
+        "--transcript",
+        type=Path,
+        help="Path to transcript file (overrides stdin)"
+    )
+
+    return parser.parse_args(args)
 
 
 def format_for_telegram(text: str) -> str:
@@ -263,17 +310,50 @@ def send_message(token: str, chat_id: int, text: str, logger: logging.Logger) ->
     return success
 
 
-def main() -> int:
-    """Main hook execution."""
+def main(argv: Optional[list[str]] = None) -> int:
+    """
+    Main hook execution.
+
+    Args:
+        argv: Command line arguments (None to use sys.argv)
+
+    Returns:
+        Exit code (0 for success, 1 for error)
+    """
+    # Parse arguments
+    if argv is None:
+        argv = sys.argv[1:]
+    args = parse_arguments(argv)
+
     # Set up paths
     claude_dir = Path(os.environ.get("CLAUDE_DIR", Path.home() / ".claude"))
     logger = setup_logging(claude_dir)
 
     try:
-        # Read stdin for hook data
-        input_data = sys.stdin.read()
-        hook_data = json.loads(input_data)
-        transcript_path = Path(hook_data.get("transcript_path", ""))
+        # Determine transcript path
+        transcript_path = None
+        if args.transcript:
+            # Standalone mode with explicit transcript path
+            transcript_path = args.transcript
+            logger.debug(f"Standalone mode: transcript={transcript_path}")
+        else:
+            # Hook mode: read from stdin
+            if not sys.stdin.isatty():
+                try:
+                    input_data = sys.stdin.read()
+                    hook_data = json.loads(input_data)
+                    transcript_path = Path(hook_data.get("transcript_path", ""))
+                    logger.debug("Hook mode: reading from stdin")
+                except (json.JSONDecodeError, KeyError) as e:
+                    logger.error(f"Invalid hook data from stdin: {e}")
+                    return 1
+            else:
+                logger.error("No transcript path provided and stdin is a terminal")
+                return 1
+
+        if not transcript_path:
+            logger.error("No transcript path available")
+            return 1
 
         logger.debug("Hook started")
 
@@ -331,9 +411,15 @@ def main() -> int:
         if not response:
             logger.debug("No text in transcript, trying tmux capture")
             try:
-                # Import TmuxController from the package
-                sys.path.insert(0, str(claude_dir.parent))
-                from claudecode_telegram.tmux import TmuxController
+                # Try importing TmuxController from the package
+                try:
+                    from claudecode_telegram.tmux import TmuxController
+                    logger.debug("Imported TmuxController from package")
+                except ImportError:
+                    # Fallback: try adding parent directory to path
+                    logger.debug("Package import failed, trying fallback path")
+                    sys.path.insert(0, str(claude_dir.parent))
+                    from claudecode_telegram.tmux import TmuxController
 
                 tmux_session = os.environ.get("TMUX_SESSION", "claude")
                 tmux_socket = os.environ.get("TMUX_SOCKET_PATH", "")
@@ -343,6 +429,9 @@ def main() -> int:
                 if response:
                     source = "tmux"
                     logger.debug("Response captured from tmux")
+            except ImportError as e:
+                logger.warning(f"Could not import TmuxController: {e}")
+                logger.warning("Tmux capture unavailable, continuing without it")
             except Exception as e:
                 logger.error(f"Error capturing from tmux: {e}")
 
@@ -371,4 +460,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # Run main with command line arguments
+    exit_code = main()
+    sys.exit(exit_code)
