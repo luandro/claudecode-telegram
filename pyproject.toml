@@ -15,3 +15,6 @@ claudecode-telegram = "bridge:main"
 [tool.setuptools]
 packages = ["claudecode_telegram"]
 py-modules = ["bridge"]
+
+[tool.setuptools.package-data]
+claudecode_telegram = ["py.typed"]
