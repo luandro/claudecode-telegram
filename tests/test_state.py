@@ -1,6 +1,7 @@
 """
 Tests for the StateManager class.
 """
+import json
 import time
 from pathlib import Path
 
@@ -304,3 +305,129 @@ class TestIntegration:
 
         # Read with manager2
         assert manager2.get_chat_id() == 123456789
+
+
+class TestSessionOperations:
+    """Tests for session-related StateManager operations."""
+
+    def test_get_recent_sessions_empty_history(self, state_manager):
+        """Test get_recent_sessions returns empty list when no history."""
+        sessions = state_manager.get_recent_sessions()
+        assert sessions == []
+
+    def test_get_recent_sessions_with_data(self, state_manager):
+        """Test get_recent_sessions returns sorted sessions."""
+        # Create history file with test data
+        history_file = state_manager.history_file
+        history_file.parent.mkdir(parents=True, exist_ok=True)
+
+        test_sessions = [
+            {"timestamp": 1000, "project": "/project1", "display": "Project 1"},
+            {"timestamp": 3000, "project": "/project3", "display": "Project 3"},
+            {"timestamp": 2000, "project": "/project2", "display": "Project 2"},
+        ]
+
+        with open(history_file, "w") as f:
+            for session in test_sessions:
+                f.write(json.dumps(session) + "\n")
+
+        # Get sessions
+        sessions = state_manager.get_recent_sessions()
+
+        # Should be sorted by timestamp (most recent first)
+        assert len(sessions) == 3
+        assert sessions[0]["timestamp"] == 3000
+        assert sessions[1]["timestamp"] == 2000
+        assert sessions[2]["timestamp"] == 1000
+
+    def test_get_recent_sessions_respects_limit(self, state_manager):
+        """Test get_recent_sessions respects the limit parameter."""
+        # Create history file with 10 sessions
+        history_file = state_manager.history_file
+        history_file.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(history_file, "w") as f:
+            for i in range(10):
+                session = {"timestamp": i * 1000, "project": f"/project{i}", "display": f"Project {i}"}
+                f.write(json.dumps(session) + "\n")
+
+        # Get only 3 sessions
+        sessions = state_manager.get_recent_sessions(limit=3)
+        assert len(sessions) == 3
+
+        # Should be the most recent 3
+        assert sessions[0]["timestamp"] == 9000
+        assert sessions[1]["timestamp"] == 8000
+        assert sessions[2]["timestamp"] == 7000
+
+    def test_get_recent_sessions_handles_invalid_json(self, state_manager):
+        """Test get_recent_sessions skips invalid JSON lines."""
+        history_file = state_manager.history_file
+        history_file.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(history_file, "w") as f:
+            f.write('{"timestamp": 1000, "project": "/project1"}\n')
+            f.write('invalid json line\n')
+            f.write('{"timestamp": 2000, "project": "/project2"}\n')
+
+        sessions = state_manager.get_recent_sessions()
+        # Should only get the 2 valid lines
+        assert len(sessions) == 2
+
+    def test_get_session_id_not_found(self, state_manager):
+        """Test get_session_id returns None when project not found."""
+        session_id = state_manager.get_session_id("/nonexistent/project")
+        assert session_id is None
+
+    def test_get_session_id_with_existing_project(self, state_manager, temp_claude_dir):
+        """Test get_session_id returns correct session ID."""
+        # Create mock project directory structure
+        project_path = "/home/user/myproject"
+        encoded = project_path.replace("/", "-").lstrip("-")
+
+        projects_dir = temp_claude_dir / "projects"
+        project_dir = projects_dir / f"-{encoded}"
+        project_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create session files
+        session1 = project_dir / "session-123.jsonl"
+        session2 = project_dir / "session-456.jsonl"
+        session1.write_text("test")
+        time.sleep(0.01)  # Ensure different mtime
+        session2.write_text("test")
+
+        # Get session ID - should return the most recent
+        session_id = state_manager.get_session_id(project_path)
+        assert session_id == "session-456"
+
+    def test_get_session_id_without_hyphen_prefix(self, state_manager, temp_claude_dir):
+        """Test get_session_id works with or without hyphen prefix."""
+        # Create mock project directory without leading hyphen
+        project_path = "/home/user/myproject"
+        encoded = project_path.replace("/", "-").lstrip("-")
+
+        projects_dir = temp_claude_dir / "projects"
+        project_dir = projects_dir / encoded  # No leading hyphen
+        project_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create session file
+        session_file = project_dir / "session-789.jsonl"
+        session_file.write_text("test")
+
+        # Get session ID
+        session_id = state_manager.get_session_id(project_path)
+        assert session_id == "session-789"
+
+    def test_get_session_id_empty_project_dir(self, state_manager, temp_claude_dir):
+        """Test get_session_id returns None when project dir has no jsonl files."""
+        # Create mock project directory but no session files
+        project_path = "/home/user/myproject"
+        encoded = project_path.replace("/", "-").lstrip("-")
+
+        projects_dir = temp_claude_dir / "projects"
+        project_dir = projects_dir / f"-{encoded}"
+        project_dir.mkdir(parents=True, exist_ok=True)
+
+        # Get session ID - should return None
+        session_id = state_manager.get_session_id(project_path)
+        assert session_id is None

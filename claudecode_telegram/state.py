@@ -9,6 +9,7 @@ Manages persistent state files in CLAUDE_DIR including:
 - history.jsonl: Session history
 """
 
+import json
 import time
 from pathlib import Path
 from typing import Optional
@@ -172,3 +173,63 @@ class StateManager:
             Tunnel URL string, or None if not set
         """
         return self._read_text_file(self.tunnel_url_file)
+
+    def get_recent_sessions(self, limit: int = 5) -> list[dict]:
+        """Get recent Claude Code sessions from history.
+
+        Args:
+            limit: Maximum number of sessions to return (default: 5)
+
+        Returns:
+            List of session dicts sorted by timestamp (most recent first)
+        """
+        if not self.history_file.exists():
+            return []
+
+        sessions = []
+        try:
+            with open(self.history_file) as f:
+                for line in f:
+                    try:
+                        sessions.append(json.loads(line.strip()))
+                    except json.JSONDecodeError:
+                        continue
+        except Exception:
+            return []
+
+        # Sort by timestamp (most recent first)
+        sessions.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
+        return sessions[:limit]
+
+    def get_session_id(self, project_path: str) -> Optional[str]:
+        """Get the session ID for a given project path.
+
+        Looks up the most recent .jsonl file in the Claude projects directory
+        that matches the encoded project path.
+
+        Args:
+            project_path: Project path (e.g., '/home/user/projects/myproject')
+
+        Returns:
+            Session ID string (filename stem), or None if not found
+        """
+        # Encode project path (replace slashes with hyphens, strip leading hyphen)
+        encoded = project_path.replace("/", "-").lstrip("-")
+
+        # Try both with and without leading hyphen prefix
+        projects_dir = self.claude_dir / "projects"
+        for prefix in [f"-{encoded}", encoded]:
+            project_dir = projects_dir / prefix
+            if not project_dir.exists():
+                continue
+
+            # Find all .jsonl files in this project directory
+            jsonl_files = list(project_dir.glob("*.jsonl"))
+            if not jsonl_files:
+                continue
+
+            # Return the most recently modified file's stem (filename without extension)
+            most_recent = max(jsonl_files, key=lambda p: p.stat().st_mtime)
+            return most_recent.stem
+
+        return None
