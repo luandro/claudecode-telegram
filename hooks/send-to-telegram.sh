@@ -1,12 +1,31 @@
 #!/bin/bash
 # Claude Code Stop hook - sends response back to Telegram
-# Combines transcript parsing with tmux capture fallback
+#
+# DEPRECATION NOTICE: This bash script is deprecated in favor of the Python version.
+# The Python script (hooks/send_to_telegram.py) is the preferred implementation.
+# This bash version is maintained as a fallback for backward compatibility.
+#
+# This script acts as a thin wrapper that:
+# 1. Checks if the Python script exists
+# 2. If so, delegates to Python implementation
+# 3. Otherwise, falls back to original bash logic
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON_SCRIPT="$SCRIPT_DIR/send_to_telegram.py"
+
+# Try Python implementation first (preferred)
+if [ -f "$PYTHON_SCRIPT" ] && command -v python3 >/dev/null 2>&1; then
+    exec python3 "$PYTHON_SCRIPT" "$@"
+fi
+
+# Fallback to original bash implementation below
+# (kept for backward compatibility during transition)
 
 DEBUG_LOG="${CLAUDE_DIR:-$HOME/.claude}/telegram_hook_debug.log"
 CLAUDE_DIR="${CLAUDE_DIR:-$HOME/.claude}"
 
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$DEBUG_LOG"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] BASH_FALLBACK: $*" >> "$DEBUG_LOG"
 }
 
 # Get bot token from environment, then from token file, then fallback
