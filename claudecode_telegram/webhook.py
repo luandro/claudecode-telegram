@@ -7,11 +7,29 @@ change detection and URL updates when the webhook endpoint changes.
 
 import re
 import time
+import threading
+from dataclasses import dataclass
 from typing import Optional
 
 from .telegram import TelegramClient
 from .state import StateManager
 from .config import BridgeConfig
+
+
+@dataclass
+class WebhookStatusCache:
+    """Cache for webhook status to enable fast health checks without API calls.
+
+    Attributes:
+        configured: Whether webhook is currently configured
+        url: Current webhook URL (None if not configured)
+        last_check: Unix timestamp of last status check
+        last_error: Last error message (None if no error)
+    """
+    configured: bool
+    url: Optional[str]
+    last_check: int
+    last_error: Optional[str]
 
 
 def _is_valid_domain(domain: str) -> bool:
@@ -53,6 +71,13 @@ class WebhookManager:
         self.telegram = telegram
         self.state = state
         self.config = config
+        self._status_cache = WebhookStatusCache(
+            configured=False,
+            url=None,
+            last_check=0,
+            last_error=None
+        )
+        self._status_lock = threading.Lock()
 
     def get_current_url(self) -> Optional[str]:
         """Get currently configured webhook URL from Telegram.
@@ -296,3 +321,140 @@ class WebhookManager:
             time.sleep(poll_interval)
 
         return None
+
+    def get_cached_status(self) -> WebhookStatusCache:
+        """Get the cached webhook status (thread-safe).
+
+        This provides fast access to webhook status without API calls.
+        The cache is updated by the recovery loop.
+
+        Returns:
+            WebhookStatusCache with current cached status
+        """
+        with self._status_lock:
+            return WebhookStatusCache(
+                configured=self._status_cache.configured,
+                url=self._status_cache.url,
+                last_check=self._status_cache.last_check,
+                last_error=self._status_cache.last_error
+            )
+
+    def _update_status_cache(
+        self,
+        configured: bool,
+        url: Optional[str] = None,
+        error: Optional[str] = None
+    ) -> None:
+        """Update the webhook status cache (thread-safe).
+
+        Args:
+            configured: Whether webhook is configured
+            url: Current webhook URL (optional)
+            error: Error message if any (optional)
+        """
+        with self._status_lock:
+            self._status_cache.configured = configured
+            self._status_cache.url = url
+            self._status_cache.last_check = int(time.time())
+            if error:
+                self._status_cache.last_error = error
+            elif configured:
+                self._status_cache.last_error = None
+
+    def _verify_and_update_cache(self) -> bool:
+        """Verify webhook status with Telegram and update cache.
+
+        Returns:
+            True if webhook is properly configured, False otherwise
+        """
+        current_url = self.get_current_url()
+        if current_url:
+            self._update_status_cache(configured=True, url=current_url)
+            return True
+        else:
+            self._update_status_cache(
+                configured=False,
+                error="No webhook configured in Telegram"
+            )
+            return False
+
+    def start_recovery_loop(self, startup_delay: int = 5) -> threading.Thread:
+        """Start the webhook recovery loop in a background thread.
+
+        The recovery loop:
+        1. Performs initial webhook setup after startup delay
+        2. Periodically verifies webhook status with Telegram (60s interval)
+        3. Re-configures webhook if tunnel URL changes (tunnel mode only)
+        4. Automatically recovers from failures with exponential backoff (max 5 min)
+        5. Updates the webhook status cache for fast health checks
+
+        Args:
+            startup_delay: Seconds to wait before initial setup (default: 5)
+
+        Returns:
+            The started daemon thread
+        """
+        def _recovery_loop():
+            """Continuous loop that manages webhook configuration and monitors changes."""
+            # Wait for services to initialize
+            if startup_delay > 0:
+                print(f"Waiting {startup_delay}s for services to initialize...", flush=True)
+                time.sleep(startup_delay)
+
+            # Initial setup
+            result = self.auto_setup()
+            if result is False:
+                print("Warning: Webhook auto-setup failed - may need manual configuration", flush=True)
+                print("Manual setup: set-webhook --domain <your-domain>", flush=True)
+                self._update_status_cache(configured=False, error="Initial auto-setup failed")
+            elif result is True:
+                self._verify_and_update_cache()
+
+            # Recovery loop settings
+            check_interval = 60  # Check every 60 seconds
+            max_backoff = 300  # Max 5 minutes between retries on failure
+            current_backoff = check_interval
+            last_tunnel_url = self.state.get_tunnel_url()
+
+            while True:
+                time.sleep(current_backoff)
+
+                try:
+                    # Check if tunnel URL changed (tunnel mode only)
+                    if self.config.deployment_mode == "tunnel":
+                        current_tunnel_url = self.state.get_tunnel_url()
+                        if current_tunnel_url and current_tunnel_url != last_tunnel_url:
+                            print(f"Tunnel URL changed: {last_tunnel_url} -> {current_tunnel_url}", flush=True)
+                            last_tunnel_url = current_tunnel_url
+                            # Re-run auto-setup with new URL
+                            result = self.auto_setup()
+                            if result:
+                                self._verify_and_update_cache()
+                                current_backoff = check_interval  # Reset backoff on success
+                            else:
+                                current_backoff = min(current_backoff * 2, max_backoff)
+                            continue
+
+                    # Periodic verification (all modes)
+                    is_configured = self._verify_and_update_cache()
+
+                    if not is_configured:
+                        # Webhook not configured, try to set it up
+                        print("Webhook not configured, attempting recovery...", flush=True)
+                        result = self.auto_setup()
+                        if result:
+                            self._verify_and_update_cache()
+                            current_backoff = check_interval
+                        else:
+                            current_backoff = min(current_backoff * 2, max_backoff)
+                    else:
+                        current_backoff = check_interval  # Reset backoff on success
+
+                except Exception as e:
+                    print(f"Error in webhook recovery loop: {e}", flush=True)
+                    self._update_status_cache(configured=False, error=str(e))
+                    current_backoff = min(current_backoff * 2, max_backoff)
+
+        thread = threading.Thread(target=_recovery_loop, daemon=True)
+        thread.start()
+        return thread

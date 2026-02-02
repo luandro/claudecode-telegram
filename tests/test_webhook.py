@@ -1,12 +1,13 @@
 """Tests for webhook management."""
 
 import time
+import threading
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, call
 
 import pytest
 
-from claudecode_telegram.webhook import WebhookManager, _is_valid_domain
+from claudecode_telegram.webhook import WebhookManager, WebhookStatusCache, _is_valid_domain
 from claudecode_telegram.telegram import TelegramClient
 from claudecode_telegram.state import StateManager
 from claudecode_telegram.config import BridgeConfig
@@ -369,3 +370,248 @@ class TestWebhookManager:
 
         url = webhook_manager._get_tunnel_webhook_url()
         assert url == "https://tunnel.example.com/test_webhook_path"
+
+
+class TestWebhookStatusCache:
+    """Tests for WebhookStatusCache functionality."""
+
+    def test_dataclass_creation(self):
+        """Test creating WebhookStatusCache instance."""
+        cache = WebhookStatusCache(
+            configured=True,
+            url="https://example.com/webhook",
+            last_check=1234567890,
+            last_error=None
+        )
+        assert cache.configured is True
+        assert cache.url == "https://example.com/webhook"
+        assert cache.last_check == 1234567890
+        assert cache.last_error is None
+
+    def test_get_cached_status_initial(self, webhook_manager):
+        """Test get_cached_status returns initial state."""
+        cache = webhook_manager.get_cached_status()
+        assert isinstance(cache, WebhookStatusCache)
+        assert cache.configured is False
+        assert cache.url is None
+        assert cache.last_check == 0
+        assert cache.last_error is None
+
+    def test_get_cached_status_thread_safe(self, webhook_manager):
+        """Test that get_cached_status is thread-safe."""
+        # Update cache from main thread
+        webhook_manager._update_status_cache(
+            configured=True,
+            url="https://example.com/webhook"
+        )
+
+        # Read from another thread
+        result = []
+        def read_cache():
+            cache = webhook_manager.get_cached_status()
+            result.append(cache)
+
+        thread = threading.Thread(target=read_cache)
+        thread.start()
+        thread.join()
+
+        assert len(result) == 1
+        assert result[0].configured is True
+        assert result[0].url == "https://example.com/webhook"
+
+    def test_update_status_cache_configured(self, webhook_manager):
+        """Test updating cache when webhook is configured."""
+        webhook_manager._update_status_cache(
+            configured=True,
+            url="https://example.com/webhook"
+        )
+
+        cache = webhook_manager.get_cached_status()
+        assert cache.configured is True
+        assert cache.url == "https://example.com/webhook"
+        assert cache.last_check > 0
+        assert cache.last_error is None
+
+    def test_update_status_cache_with_error(self, webhook_manager):
+        """Test updating cache with error message."""
+        webhook_manager._update_status_cache(
+            configured=False,
+            error="Connection failed"
+        )
+
+        cache = webhook_manager.get_cached_status()
+        assert cache.configured is False
+        assert cache.last_error == "Connection failed"
+
+    def test_update_status_cache_clears_error_on_success(self, webhook_manager):
+        """Test that successful update clears previous error."""
+        # First set an error
+        webhook_manager._update_status_cache(
+            configured=False,
+            error="Previous error"
+        )
+
+        # Then update successfully
+        webhook_manager._update_status_cache(
+            configured=True,
+            url="https://example.com/webhook"
+        )
+
+        cache = webhook_manager.get_cached_status()
+        assert cache.configured is True
+        assert cache.last_error is None
+
+    def test_verify_and_update_cache_success(self, webhook_manager, mock_telegram):
+        """Test _verify_and_update_cache when webhook is configured."""
+        mock_telegram.get_webhook_info.return_value = {
+            "url": "https://example.com/webhook"
+        }
+
+        result = webhook_manager._verify_and_update_cache()
+
+        assert result is True
+        cache = webhook_manager.get_cached_status()
+        assert cache.configured is True
+        assert cache.url == "https://example.com/webhook"
+        assert cache.last_error is None
+
+    def test_verify_and_update_cache_failure(self, webhook_manager, mock_telegram):
+        """Test _verify_and_update_cache when webhook is not configured."""
+        mock_telegram.get_webhook_info.return_value = {"url": ""}
+
+        result = webhook_manager._verify_and_update_cache()
+
+        assert result is False
+        cache = webhook_manager.get_cached_status()
+        assert cache.configured is False
+        assert cache.last_error == "No webhook configured in Telegram"
+
+
+class TestRecoveryLoop:
+    """Tests for webhook recovery loop functionality."""
+
+    def test_start_recovery_loop_returns_thread(self, webhook_manager, mock_telegram):
+        """Test that start_recovery_loop returns a daemon thread."""
+        # Mock properly to avoid errors in background thread
+        mock_telegram.get_webhook_info.return_value = {
+            "url": "https://example.com/webhook",
+            "pending_update_count": 0,
+            "last_error_date": 0
+        }
+
+        thread = webhook_manager.start_recovery_loop(startup_delay=0)
+        # Give thread time to start
+        time.sleep(0.1)
+
+        assert isinstance(thread, threading.Thread)
+        assert thread.daemon is True
+        assert thread.is_alive()
+
+    def test_recovery_loop_logic_with_configured_webhook(self, webhook_manager, mock_telegram):
+        """Test recovery loop logic when webhook is already configured."""
+        mock_telegram.get_webhook_info.return_value = {
+            "url": "https://example.com/test_webhook_path",
+            "pending_update_count": 0,
+            "last_error_date": 0
+        }
+
+        # Directly call the verification method that the loop uses
+        result = webhook_manager._verify_and_update_cache()
+
+        assert result is True
+        cache = webhook_manager.get_cached_status()
+        assert cache.configured is True
+        assert cache.url == "https://example.com/test_webhook_path"
+        assert cache.last_check > 0
+
+    def test_recovery_loop_logic_with_failed_setup(self, webhook_manager, mock_telegram):
+        """Test recovery loop logic when setup fails."""
+        mock_telegram.get_webhook_info.return_value = {
+            "url": "",
+            "pending_update_count": 0,
+            "last_error_date": 0
+        }
+
+        # Directly call the verification method that the loop uses
+        result = webhook_manager._verify_and_update_cache()
+
+        assert result is False
+        cache = webhook_manager.get_cached_status()
+        assert cache.configured is False
+        assert cache.last_error == "No webhook configured in Telegram"
+
+    def test_recovery_loop_handles_tunnel_mode(self, webhook_manager, mock_telegram, state_manager, mock_config):
+        """Test that recovery loop can handle tunnel mode configuration."""
+        mock_config.deployment_mode = "tunnel"
+
+        # Set tunnel URL
+        state_manager._write_text_file(
+            state_manager.tunnel_url_file,
+            "https://tunnel.example.com"
+        )
+
+        mock_telegram.get_webhook_info.return_value = {
+            "url": "",
+            "pending_update_count": 0,
+            "last_error_date": 0
+        }
+        mock_telegram.set_webhook.return_value = True
+
+        # Test that auto_setup works with tunnel mode
+        result = webhook_manager.auto_setup()
+        assert result is True
+
+    def test_recovery_from_unconfigured_state(self, webhook_manager, mock_telegram):
+        """Test logic for recovering from unconfigured state."""
+        # Simulate webhook becoming unconfigured
+        mock_telegram.get_webhook_info.return_value = {
+            "url": "",
+            "pending_update_count": 0,
+            "last_error_date": 0
+        }
+
+        # Verify detection
+        is_configured = webhook_manager._verify_and_update_cache()
+        assert is_configured is False
+
+        cache = webhook_manager.get_cached_status()
+        assert cache.configured is False
+        assert cache.last_error == "No webhook configured in Telegram"
+
+    def test_update_cache_with_multiple_threads(self, webhook_manager):
+        """Test that cache updates are thread-safe."""
+        results = []
+
+        def update_cache(configured, url):
+            webhook_manager._update_status_cache(configured=configured, url=url)
+            results.append(webhook_manager.get_cached_status())
+
+        threads = [
+            threading.Thread(target=update_cache, args=(True, f"https://url{i}.com"))
+            for i in range(5)
+        ]
+
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # All updates should have succeeded without errors
+        assert len(results) == 5
+        # Final cache should have one of the URLs
+        final_cache = webhook_manager.get_cached_status()
+        assert final_cache.configured is True
+        assert "https://url" in final_cache.url
+
+    def test_recovery_loop_respects_startup_delay(self, webhook_manager, mock_telegram):
+        """Test that recovery loop includes startup delay."""
+        mock_telegram.get_webhook_info.return_value = {
+            "url": "https://example.com/webhook",
+            "pending_update_count": 0,
+            "last_error_date": 0
+        }
+
+        # Just verify the method accepts startup_delay parameter
+        thread = webhook_manager.start_recovery_loop(startup_delay=5)
+        assert isinstance(thread, threading.Thread)
+        assert thread.daemon is True
