@@ -7,8 +7,10 @@ Telegram bot bridge for Claude Code. Send messages from Telegram, get responses 
 ## Table of Contents
 
 - [Background](#background)
+- [Project Structure](#project-structure)
 - [Quick Start (Tunnel Mode)](#quick-start-tunnel-mode)
 - [Install](#install)
+- [Development Setup](#development-setup)
 - [Usage](#usage)
 - [Configuration](#configuration)
 - [Docker Deployment (Caddy + HTTPS)](#docker-deployment-caddy--https)
@@ -22,6 +24,66 @@ Telegram bot bridge for Claude Code. Send messages from Telegram, get responses 
 ## Background
 
 The bridge receives Telegram webhooks, injects messages into Claude Code via tmux, and sends Claude's responses back to Telegram via a Stop hook. It only responds to Telegram-initiated messages (using a pending file as a flag).
+
+## Project Structure
+
+The project follows a modular architecture with clear separation of concerns:
+
+### Core Modules
+
+```
+claudecode-telegram/
+├── bridge.py                      # CLI entry point and command dispatcher
+├── claudecode_telegram/           # Main Python package
+│   ├── __init__.py               # Package initialization
+│   ├── config.py                 # Configuration management and environment validation
+│   ├── server.py                 # HTTP server for webhook handling
+│   ├── handler.py                # Request routing and message processing
+│   ├── telegram.py               # Telegram Bot API client
+│   ├── webhook.py                # Webhook lifecycle management
+│   ├── state.py                  # State file management (chat IDs, pending flags)
+│   ├── tmux.py                   # tmux session interaction and message injection
+│   ├── sessions.py               # Session history tracking
+│   └── commands/                 # Bot command system
+│       ├── __init__.py          # Command package initialization
+│       ├── base.py              # Command interface and base classes
+│       ├── registry.py          # Command registration and dispatch
+│       └── builtin.py           # Built-in commands (/start, /help, /status, etc.)
+├── hooks/                        # Claude Code Stop hook scripts
+│   ├── send-to-telegram.sh      # Bash wrapper (delegates to Python)
+│   └── send_to_telegram.py      # Python hook implementation (transcript parsing)
+├── tests/                        # Test suite
+│   ├── test_config.py           # Configuration tests
+│   ├── test_tmux.py             # tmux integration tests
+│   ├── test_commands_builtin.py # Command system tests
+│   └── test_sessions_integration.py  # Session management tests
+├── pyproject.toml                # Python package metadata
+├── docker-compose.yml            # Container orchestration
+├── Dockerfile                    # Bridge container image
+├── Caddyfile                     # Reverse proxy configuration
+└── .env.example                  # Environment variable template
+```
+
+### Module Responsibilities
+
+- **bridge.py**: Thin CLI wrapper providing webhook management commands (`set-webhook`, `get-webhook-info`, `verify-webhook`, `delete-webhook`) and server startup
+- **config.py**: Environment variable loading, validation, and deployment mode handling (tunnel vs production)
+- **server.py**: HTTP server implementation with webhook endpoints, health checks, and request validation
+- **handler.py**: Request routing, authorization checks, message extraction, and Claude Code injection coordination
+- **telegram.py**: Telegram Bot API client with methods for sending messages, reactions, and webhook management
+- **webhook.py**: Webhook lifecycle management including auto-setup, URL detection, and validation against Telegram API
+- **state.py**: State file management for chat IDs, pending message flags, and webhook URLs
+- **tmux.py**: tmux session detection, validation, and message injection via `tmux send-keys`
+- **sessions.py**: Conversation history tracking with JSONL storage for context preservation
+- **commands/**: Extensible command system with registry pattern for bot commands
+
+### Hook Architecture
+
+The Stop hook system uses a Python-first approach with bash fallback:
+
+- **send-to-telegram.sh**: Thin bash wrapper that delegates to Python script if available
+- **send_to_telegram.py**: Full Python implementation with transcript parsing, tmux capture fallback, and robust error handling
+- Hook reads Claude Code transcript, extracts assistant responses, and sends them to Telegram via Bot API
 
 ```mermaid
 flowchart LR
@@ -136,6 +198,91 @@ uv venv && source .venv/bin/activate
 uv pip install -e .
 ```
 
+## Development Setup
+
+### Creating Virtual Environment
+
+```bash
+# Create and activate virtual environment
+uv venv
+source .venv/bin/activate  # On Linux/macOS
+# or
+.venv\Scripts\activate     # On Windows
+
+# Install package in editable mode
+uv pip install -e .
+```
+
+### Running the Bridge Locally
+
+```bash
+# Set environment variables
+export TELEGRAM_BOT_TOKEN="your_bot_token"
+export DM_ALLOWED_USER_ID="your_telegram_user_id"
+export DEPLOYMENT_MODE="tunnel"
+
+# Run the bridge
+python bridge.py
+# or
+claudecode-telegram
+```
+
+### Installing the Hook
+
+The Python hook script provides better error handling and transcript parsing:
+
+```bash
+# Copy Python hook to Claude directory
+cp hooks/send_to_telegram.py ~/.claude/hooks/
+chmod +x ~/.claude/hooks/send_to_telegram.py
+
+# Copy bash wrapper (optional, for backward compatibility)
+cp hooks/send-to-telegram.sh ~/.claude/hooks/
+chmod +x ~/.claude/hooks/send-to-telegram.sh
+```
+
+Configure the hook in `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/send_to_telegram.py"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Note**: The bash wrapper (`send-to-telegram.sh`) automatically delegates to the Python script if available, providing seamless backward compatibility.
+
+### Running Tests
+
+The project includes a comprehensive test suite with 551+ tests. See the [Testing](#testing) section for detailed information on running tests.
+
+```bash
+# Install test dependencies (if not already installed)
+uv pip install pytest pytest-cov
+
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=claudecode_telegram --cov-report=html
+
+# Run specific test file
+pytest tests/test_config.py
+
+# Run with verbose output
+pytest -v
+```
+
 ## Usage
 
 ### 1) Create a Telegram bot
@@ -144,10 +291,12 @@ uv pip install -e .
 
 ### 2) Configure the Claude Stop hook
 
+**Python Hook (Recommended)**:
+
 ```bash
-cp hooks/send-to-telegram.sh ~/.claude/hooks/
-nano ~/.claude/hooks/send-to-telegram.sh  # set your bot token
-chmod +x ~/.claude/hooks/send-to-telegram.sh
+# Copy Python hook
+cp hooks/send_to_telegram.py ~/.claude/hooks/
+chmod +x ~/.claude/hooks/send_to_telegram.py
 ```
 
 Add to `~/.claude/settings.json`:
@@ -160,7 +309,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/send-to-telegram.sh"
+            "command": "~/.claude/hooks/send_to_telegram.py"
           }
         ]
       }
@@ -168,6 +317,17 @@ Add to `~/.claude/settings.json`:
   }
 }
 ```
+
+**Bash Wrapper (Backward Compatible)**:
+
+The bash wrapper automatically delegates to the Python script:
+
+```bash
+cp hooks/send-to-telegram.sh ~/.claude/hooks/
+chmod +x ~/.claude/hooks/send-to-telegram.sh
+```
+
+Configure in `~/.claude/settings.json` (same format as above, just use `send-to-telegram.sh` instead)
 
 ### 3) Start tmux + Claude Code
 
@@ -413,6 +573,76 @@ The `claudecode-telegram` entrypoint supports webhook management:
 - `delete-webhook`
 
 If no command is provided, the bridge server starts.
+
+## Testing
+
+The project includes a comprehensive test suite with 551+ tests covering all major components.
+
+### Running Tests
+
+```bash
+# Activate virtual environment
+source .venv/bin/activate
+
+# Run all tests
+pytest
+
+# Run with verbose output
+pytest -v
+
+# Run specific test file
+pytest tests/test_config.py
+pytest tests/test_webhook.py
+pytest tests/test_commands_builtin.py
+
+# Run with coverage report
+pytest --cov=claudecode_telegram --cov-report=html
+# View coverage report at htmlcov/index.html
+```
+
+### Test Structure
+
+```
+tests/
+├── test_bash_wrapper.py          # Bash hook wrapper tests
+├── test_bridge.py                # CLI entry point tests
+├── test_commands_builtin.py      # Bot command tests
+├── test_config.py                # Configuration validation tests
+├── test_handler.py               # Request handler tests
+├── test_server.py                # HTTP server tests
+├── test_sessions_integration.py  # Session history tests
+├── test_state.py                 # State management tests
+├── test_telegram.py              # Telegram API client tests
+├── test_tmux.py                  # tmux integration tests
+└── test_webhook.py               # Webhook management tests
+```
+
+### Test Categories
+
+- **Unit Tests**: Individual module functionality (config, state, telegram client)
+- **Integration Tests**: Component interaction (webhook setup, session management)
+- **Command Tests**: Bot command behavior and registration
+- **Hook Tests**: Stop hook script validation and delegation logic
+
+### Manual Testing
+
+```bash
+# Test webhook configuration
+claudecode-telegram set-webhook --domain your-domain.com
+claudecode-telegram verify-webhook
+claudecode-telegram get-webhook-info
+
+# Test bridge server
+export TELEGRAM_BOT_TOKEN="your_token"
+export DM_ALLOWED_USER_ID="your_id"
+export DEPLOYMENT_MODE="tunnel"
+claudecode-telegram  # Start server
+
+# In another terminal, send test webhook
+curl -X POST http://localhost:8080/webhook_path \
+  -H "Content-Type: application/json" \
+  -d '{"message": {"chat": {"id": 123}, "text": "test"}}'
+```
 
 ## Deployment Verification
 
