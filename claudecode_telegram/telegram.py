@@ -1,4 +1,31 @@
-"""Telegram Bot API client with centralized error handling and logging."""
+"""Telegram Bot API client with centralized error handling and logging.
+
+This module provides a thread-safe, production-ready client for the Telegram Bot API
+with comprehensive error handling, sensitive data redaction, and background typing indicators.
+
+Main Classes:
+    TelegramClient: Core API client for all Telegram operations
+    TypingIndicator: Context manager for showing typing indicators during long operations
+
+Usage Example:
+    >>> from claudecode_telegram.telegram import TelegramClient
+    >>> client = TelegramClient(bot_token="your_bot_token")
+    >>> client.send_message(chat_id=123456, text="Hello!")
+    >>>
+    >>> # Use typing indicator during long operations
+    >>> from claudecode_telegram.telegram import TypingIndicator
+    >>> with TypingIndicator(client, chat_id):
+    ...     # Long-running operation here
+    ...     process_message()
+
+Features:
+    - Automatic bot token redaction in error messages
+    - Deep redaction of sensitive data (chat IDs, message text, URLs)
+    - Thread-safe typing indicator loops
+    - Webhook management with change detection
+    - Bot command menu registration
+    - Message reactions and callback query handling
+"""
 
 import json
 import threading

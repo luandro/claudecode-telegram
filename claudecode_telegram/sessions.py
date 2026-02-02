@@ -1,4 +1,32 @@
-"""Session management utilities for Claude Code Telegram bridge."""
+"""Session management utilities for Claude Code Telegram bridge.
+
+This module provides helper functions for working with Claude Code session history,
+including session discovery, recent session retrieval, and inline keyboard building
+for the /resume command.
+
+Main Functions:
+    get_recent_sessions: Retrieve recent sessions from history.jsonl
+    get_session_id: Find session ID from project path
+    build_session_keyboard: Build Telegram inline keyboard for session picker
+
+Usage Example:
+    >>> from pathlib import Path
+    >>> from claudecode_telegram.sessions import get_recent_sessions, build_session_keyboard
+    >>>
+    >>> history_file = Path("~/.claude/history.jsonl").expanduser()
+    >>> sessions = get_recent_sessions(history_file, limit=5)
+    >>>
+    >>> claude_dir = Path("~/.claude").expanduser()
+    >>> keyboard = build_session_keyboard(sessions, claude_dir)
+    >>> # Use keyboard with Telegram API for /resume command
+
+Features:
+    - Robust JSON parsing with error recovery
+    - Project path encoding/decoding for session lookup
+    - Session sorting by timestamp (most recent first)
+    - Inline keyboard generation with callback data
+    - Graceful handling of missing or malformed files
+"""
 
 import json
 from pathlib import Path
