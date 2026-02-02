@@ -20,10 +20,11 @@ from .commands.registry import CommandRegistry
 
 
 def setup_hooks(claude_dir: Path, source_dir: Path) -> None:
-    """Install the Claude Code Stop hook if it doesn't exist or update if needed.
+    """Install the Claude Code Stop hooks if they don't exist or update if needed.
 
-    Copies the send-to-telegram.sh hook script from the package's hooks
-    directory to the Claude Code hooks directory, making it executable.
+    Copies both send-to-telegram.sh (shell wrapper) and send_to_telegram.py
+    (Python implementation) from the package's hooks directory to the Claude
+    Code hooks directory, making them executable.
 
     Args:
         claude_dir: Path to Claude configuration directory (typically ~/.claude)
@@ -31,7 +32,7 @@ def setup_hooks(claude_dir: Path, source_dir: Path) -> None:
                    (typically the package installation directory)
 
     Raises:
-        FileNotFoundError: If the source hook script cannot be found
+        FileNotFoundError: If the source hook scripts cannot be found
         PermissionError: If unable to write to hooks directory or set permissions
     """
     # Ensure hooks directory exists
@@ -39,24 +40,38 @@ def setup_hooks(claude_dir: Path, source_dir: Path) -> None:
     hooks_dir.mkdir(parents=True, exist_ok=True)
 
     # Define source and destination paths
-    hook_dest = hooks_dir / "send-to-telegram.sh"
-    hook_src = source_dir / "hooks" / "send-to-telegram.sh"
+    hook_dest_sh = hooks_dir / "send-to-telegram.sh"
+    hook_src_sh = source_dir / "hooks" / "send-to-telegram.sh"
 
-    # Check if source hook exists
-    if not hook_src.exists():
-        raise FileNotFoundError(
-            f"Hook source not found at {hook_src}. "
-            "This may indicate a package installation issue."
-        )
+    hook_dest_py = hooks_dir / "send_to_telegram.py"
+    hook_src_py = source_dir / "hooks" / "send_to_telegram.py"
 
-    # Copy hook script to destination
-    print(f"Installing hook to {hook_dest}", flush=True)
-    shutil.copy2(hook_src, hook_dest)
+    # Check if source hooks exist
+    if not hook_src_sh.exists():
+        # Try parent directory if hooks not found in source_dir (e.g. when running from claudecode_telegram/)
+        alt_hook_src_sh = source_dir.parent / "hooks" / "send-to-telegram.sh"
+        alt_hook_src_py = source_dir.parent / "hooks" / "send_to_telegram.py"
 
-    # Make hook executable (rwxr-xr-x)
-    hook_dest.chmod(0o755)
+        if alt_hook_src_sh.exists():
+            hook_src_sh = alt_hook_src_sh
+            hook_src_py = alt_hook_src_py
+        else:
+            raise FileNotFoundError(
+                f"Hook source not found at {hook_src_sh} or {alt_hook_src_sh}. "
+                "This may indicate a package installation issue."
+            )
 
-    print(f"Hook installed successfully at {hook_dest}", flush=True)
+    # Copy hook scripts to destination
+    print(f"Installing hooks to {hooks_dir}", flush=True)
+    shutil.copy2(hook_src_sh, hook_dest_sh)
+    if hook_src_py.exists():
+        shutil.copy2(hook_src_py, hook_dest_py)
+        hook_dest_py.chmod(0o755)
+
+    # Make shell hook executable (rwxr-xr-x)
+    hook_dest_sh.chmod(0o755)
+
+    print(f"Hooks installed successfully at {hooks_dir}", flush=True)
 
 
 def create_server(

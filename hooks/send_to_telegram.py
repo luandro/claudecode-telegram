@@ -411,15 +411,33 @@ def main(argv: Optional[list[str]] = None) -> int:
         if not response:
             logger.debug("No text in transcript, trying tmux capture")
             try:
-                # Try importing TmuxController from the package
+                # Try various paths to find the package
                 try:
                     from claudecode_telegram.tmux import TmuxController
-                    logger.debug("Imported TmuxController from package")
+                    logger.debug("Imported TmuxController from system path")
                 except ImportError:
-                    # Fallback: try adding parent directory to path
-                    logger.debug("Package import failed, trying fallback path")
-                    sys.path.insert(0, str(claude_dir.parent))
-                    from claudecode_telegram.tmux import TmuxController
+                    # Try current directory, project root, etc.
+                    script_dir = Path(__file__).parent.absolute()
+                    possible_paths = [
+                        script_dir.parent,  # If in hooks/
+                        script_dir,         # If in project root
+                        Path.cwd(),
+                    ]
+
+                    success = False
+                    for path in possible_paths:
+                        if (path / "claudecode_telegram").exists():
+                            sys.path.insert(0, str(path))
+                            try:
+                                from claudecode_telegram.tmux import TmuxController
+                                logger.debug(f"Imported TmuxController from {path}")
+                                success = True
+                                break
+                            except ImportError:
+                                continue
+
+                    if not success:
+                        raise ImportError("Could not find claudecode_telegram package in search paths")
 
                 tmux_session = os.environ.get("TMUX_SESSION", "claude")
                 tmux_socket = os.environ.get("TMUX_SOCKET_PATH", "")
