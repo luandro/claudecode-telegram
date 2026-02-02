@@ -7,6 +7,7 @@ for sending Telegram messages to the running Claude Code instance.
 
 import logging
 import subprocess
+import time
 from typing import Optional
 
 
@@ -221,3 +222,81 @@ class TmuxController:
         except Exception as e:
             logger.error(f"Unexpected error capturing pane from tmux: {e}")
             return None
+
+    # High-level convenience methods
+
+    def send_text(self, text: str, press_enter: bool = True) -> None:
+        """
+        Send text to the tmux session, optionally followed by Enter.
+
+        This is a convenience method that combines send_keys() with an optional
+        send_enter() call, encapsulating a common pattern used throughout the codebase.
+
+        Args:
+            text: Text to send to the session
+            press_enter: If True, automatically press Enter after sending text
+
+        Raises:
+            RuntimeError: If tmux command fails
+        """
+        self.send_keys(text, literal=True)
+        if press_enter:
+            self.send_enter()
+        logger.debug(f"Sent text to '{self.session}' (enter={press_enter}): {text[:50]}{'...' if len(text) > 50 else ''}")
+
+    def interrupt(self) -> None:
+        """
+        Interrupt the current operation by sending Escape.
+
+        This is a convenience method that sends the Escape key to interrupt
+        any running command in the Claude Code session.
+
+        Raises:
+            RuntimeError: If tmux command fails
+        """
+        self.send_escape()
+        logger.debug(f"Interrupted '{self.session}' with Escape")
+
+    def interrupt_and_send(self, text: str, delay: float = 0.2) -> None:
+        """
+        Interrupt current operation, wait, then send text with Enter.
+
+        This encapsulates a common pattern: escape, sleep, send text, enter.
+        Used when you need to interrupt Claude and immediately send a new command.
+
+        Args:
+            text: Text to send after interruption
+            delay: Seconds to wait after interrupt before sending text
+
+        Raises:
+            RuntimeError: If tmux command fails
+        """
+        self.send_escape()
+        time.sleep(delay)
+        self.send_keys(text, literal=True)
+        self.send_enter()
+        logger.debug(f"Interrupted '{self.session}', waited {delay}s, sent text: {text[:50]}{'...' if len(text) > 50 else ''}")
+
+    def exit_and_run(self, command: str, delay: float = 0.5) -> None:
+        """
+        Exit current Claude session and run a new command.
+
+        This encapsulates the pattern: escape, /exit, enter, sleep, command, enter.
+        Used for resume/continue operations where you need to exit the current
+        session and start a new one.
+
+        Args:
+            command: Command to run after exiting (e.g., 'claude --continue --dangerously-skip-permissions')
+            delay: Seconds to wait after /exit before running command
+
+        Raises:
+            RuntimeError: If tmux command fails
+        """
+        self.send_escape()
+        time.sleep(0.2)
+        self.send_keys("/exit", literal=True)
+        self.send_enter()
+        time.sleep(delay)
+        self.send_keys(command, literal=True)
+        self.send_enter()
+        logger.debug(f"Exited and ran command in '{self.session}': {command[:50]}{'...' if len(command) > 50 else ''}")

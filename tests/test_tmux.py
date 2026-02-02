@@ -275,3 +275,172 @@ class TestTmuxController:
         # Test capture_pane
         controller.capture_pane()
         assert mock_run.call_args[0][0][:3] == ["tmux", "-S", "/tmp/tmux-socket"]
+
+    # Tests for high-level convenience methods
+
+    @patch("subprocess.run")
+    def test_send_text_with_enter(self, mock_run):
+        """Test send_text() sends text and presses Enter by default."""
+        mock_run.return_value = MagicMock(returncode=0)
+        controller = TmuxController(session="claude")
+        controller.send_text("hello world")
+
+        # Should call subprocess.run twice: once for send_keys, once for send_enter
+        assert mock_run.call_count == 2
+
+        # First call should be send_keys with literal flag
+        first_call_args = mock_run.call_args_list[0][0][0]
+        assert first_call_args == ["tmux", "send-keys", "-t", "claude", "-l", "hello world"]
+
+        # Second call should be send_enter
+        second_call_args = mock_run.call_args_list[1][0][0]
+        assert second_call_args == ["tmux", "send-keys", "-t", "claude", "Enter"]
+
+    @patch("subprocess.run")
+    def test_send_text_without_enter(self, mock_run):
+        """Test send_text() without pressing Enter."""
+        mock_run.return_value = MagicMock(returncode=0)
+        controller = TmuxController(session="claude")
+        controller.send_text("hello world", press_enter=False)
+
+        # Should only call subprocess.run once for send_keys
+        assert mock_run.call_count == 1
+
+        # Call should be send_keys with literal flag, no Enter
+        call_args = mock_run.call_args[0][0]
+        assert call_args == ["tmux", "send-keys", "-t", "claude", "-l", "hello world"]
+
+    @patch("subprocess.run")
+    def test_interrupt(self, mock_run):
+        """Test interrupt() sends Escape."""
+        mock_run.return_value = MagicMock(returncode=0)
+        controller = TmuxController(session="claude")
+        controller.interrupt()
+
+        mock_run.assert_called_once()
+        args = mock_run.call_args[0][0]
+        assert args == ["tmux", "send-keys", "-t", "claude", "Escape"]
+
+    @patch("subprocess.run")
+    @patch("time.sleep")
+    def test_interrupt_and_send(self, mock_sleep, mock_run):
+        """Test interrupt_and_send() with default delay."""
+        mock_run.return_value = MagicMock(returncode=0)
+        controller = TmuxController(session="claude")
+        controller.interrupt_and_send("new command")
+
+        # Should call subprocess.run three times: escape, send_keys, send_enter
+        assert mock_run.call_count == 3
+
+        # First call should be Escape
+        first_call_args = mock_run.call_args_list[0][0][0]
+        assert first_call_args == ["tmux", "send-keys", "-t", "claude", "Escape"]
+
+        # Should sleep with default delay
+        mock_sleep.assert_called_once_with(0.2)
+
+        # Second call should be send_keys
+        second_call_args = mock_run.call_args_list[1][0][0]
+        assert second_call_args == ["tmux", "send-keys", "-t", "claude", "-l", "new command"]
+
+        # Third call should be Enter
+        third_call_args = mock_run.call_args_list[2][0][0]
+        assert third_call_args == ["tmux", "send-keys", "-t", "claude", "Enter"]
+
+    @patch("subprocess.run")
+    @patch("time.sleep")
+    def test_interrupt_and_send_custom_delay(self, mock_sleep, mock_run):
+        """Test interrupt_and_send() with custom delay."""
+        mock_run.return_value = MagicMock(returncode=0)
+        controller = TmuxController(session="claude")
+        controller.interrupt_and_send("new command", delay=0.5)
+
+        # Should sleep with custom delay
+        mock_sleep.assert_called_once_with(0.5)
+        assert mock_run.call_count == 3
+
+    @patch("subprocess.run")
+    @patch("time.sleep")
+    def test_exit_and_run(self, mock_sleep, mock_run):
+        """Test exit_and_run() with default delay."""
+        mock_run.return_value = MagicMock(returncode=0)
+        controller = TmuxController(session="claude")
+        controller.exit_and_run("claude --continue --dangerously-skip-permissions")
+
+        # Should call subprocess.run five times: escape, /exit send, enter, command send, enter
+        assert mock_run.call_count == 5
+
+        # First call should be Escape
+        first_call_args = mock_run.call_args_list[0][0][0]
+        assert first_call_args == ["tmux", "send-keys", "-t", "claude", "Escape"]
+
+        # Should sleep twice: 0.2s after escape, then custom delay after /exit
+        assert mock_sleep.call_count == 2
+        assert mock_sleep.call_args_list[0][0][0] == 0.2
+        assert mock_sleep.call_args_list[1][0][0] == 0.5  # default delay
+
+        # Second call should be /exit
+        second_call_args = mock_run.call_args_list[1][0][0]
+        assert second_call_args == ["tmux", "send-keys", "-t", "claude", "-l", "/exit"]
+
+        # Third call should be Enter
+        third_call_args = mock_run.call_args_list[2][0][0]
+        assert third_call_args == ["tmux", "send-keys", "-t", "claude", "Enter"]
+
+        # Fourth call should be the command
+        fourth_call_args = mock_run.call_args_list[3][0][0]
+        assert fourth_call_args == ["tmux", "send-keys", "-t", "claude", "-l", "claude --continue --dangerously-skip-permissions"]
+
+        # Fifth call should be Enter
+        fifth_call_args = mock_run.call_args_list[4][0][0]
+        assert fifth_call_args == ["tmux", "send-keys", "-t", "claude", "Enter"]
+
+    @patch("subprocess.run")
+    @patch("time.sleep")
+    def test_exit_and_run_custom_delay(self, mock_sleep, mock_run):
+        """Test exit_and_run() with custom delay."""
+        mock_run.return_value = MagicMock(returncode=0)
+        controller = TmuxController(session="claude")
+        controller.exit_and_run("claude --resume abc123", delay=1.0)
+
+        # Should sleep twice with correct delays
+        assert mock_sleep.call_count == 2
+        assert mock_sleep.call_args_list[0][0][0] == 0.2  # fixed delay after escape
+        assert mock_sleep.call_args_list[1][0][0] == 1.0  # custom delay after /exit
+        assert mock_run.call_count == 5
+
+    @patch("subprocess.run")
+    def test_send_text_raises_on_failure(self, mock_run):
+        """Test send_text() propagates RuntimeError on failure."""
+        mock_run.side_effect = subprocess.CalledProcessError(
+            returncode=1,
+            cmd=["tmux"],
+            stderr=b"error message"
+        )
+        controller = TmuxController(session="claude")
+        with pytest.raises(RuntimeError, match="Failed to send keys"):
+            controller.send_text("hello")
+
+    @patch("subprocess.run")
+    def test_interrupt_and_send_raises_on_failure(self, mock_run):
+        """Test interrupt_and_send() propagates RuntimeError on failure."""
+        mock_run.side_effect = subprocess.CalledProcessError(
+            returncode=1,
+            cmd=["tmux"],
+            stderr=b"error message"
+        )
+        controller = TmuxController(session="claude")
+        with pytest.raises(RuntimeError, match="Failed to send Escape"):
+            controller.interrupt_and_send("hello")
+
+    @patch("subprocess.run")
+    def test_exit_and_run_raises_on_failure(self, mock_run):
+        """Test exit_and_run() propagates RuntimeError on failure."""
+        mock_run.side_effect = subprocess.CalledProcessError(
+            returncode=1,
+            cmd=["tmux"],
+            stderr=b"error message"
+        )
+        controller = TmuxController(session="claude")
+        with pytest.raises(RuntimeError, match="Failed to send Escape"):
+            controller.exit_and_run("claude --continue")
