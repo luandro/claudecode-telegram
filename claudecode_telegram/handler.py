@@ -412,18 +412,20 @@ class TelegramWebhookHandler(BaseHTTPRequestHandler):
         self.handle_message(update)
 
 
-def create_handler_factory(
+def create_handler_class(
     config: BridgeConfig,
     telegram: TelegramClient,
     tmux: TmuxController,
     state: StateManager,
     webhook: WebhookManager,
-    commands: CommandRegistry
+    registry: CommandRegistry
 ) -> type[TelegramWebhookHandler]:
     """Create a handler class with injected dependencies.
 
     This factory pattern allows us to inject dependencies into the handler
     class without using global variables or mutable default arguments.
+    The factory is needed because HTTPServer instantiates the handler class
+    directly without allowing us to pass constructor arguments.
 
     Args:
         config: Bridge configuration
@@ -431,7 +433,7 @@ def create_handler_factory(
         tmux: Tmux controller instance
         state: State manager instance
         webhook: Webhook manager instance
-        commands: Command registry instance
+        registry: Command registry instance
 
     Returns:
         TelegramWebhookHandler class with dependencies set as class attributes
@@ -447,6 +449,32 @@ def create_handler_factory(
     Handler.tmux = tmux
     Handler.state = state
     Handler.webhook = webhook
-    Handler.commands = commands
+    Handler.commands = registry
 
     return Handler
+
+
+def create_handler_factory(
+    config: BridgeConfig,
+    telegram: TelegramClient,
+    tmux: TmuxController,
+    state: StateManager,
+    webhook: WebhookManager,
+    commands: CommandRegistry
+) -> type[TelegramWebhookHandler]:
+    """Create a handler class with injected dependencies.
+
+    This is an alias for create_handler_class for backward compatibility.
+
+    Args:
+        config: Bridge configuration
+        telegram: Telegram client instance
+        tmux: Tmux controller instance
+        state: State manager instance
+        webhook: Webhook manager instance
+        commands: Command registry instance
+
+    Returns:
+        TelegramWebhookHandler class with dependencies set as class attributes
+    """
+    return create_handler_class(config, telegram, tmux, state, webhook, commands)

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from claudecode_telegram.handler import TelegramWebhookHandler, create_handler_factory
+from claudecode_telegram.handler import TelegramWebhookHandler, create_handler_factory, create_handler_class
 from claudecode_telegram.config import BridgeConfig
 from claudecode_telegram.telegram import TelegramClient
 from claudecode_telegram.tmux import TmuxController
@@ -134,6 +134,75 @@ class TestHandlerFactory:
         assert handler_class.state is mock_state
         assert handler_class.webhook is mock_webhook
         assert handler_class.commands is mock_commands
+
+
+class TestHandlerClassFactory:
+    """Tests for create_handler_class function."""
+
+    def test_creates_handler_class(self, mock_config, mock_telegram, mock_tmux,
+                                   mock_state, mock_webhook, mock_commands):
+        """Test that create_handler_class creates a valid handler class."""
+        handler_class = create_handler_class(
+            config=mock_config,
+            telegram=mock_telegram,
+            tmux=mock_tmux,
+            state=mock_state,
+            webhook=mock_webhook,
+            registry=mock_commands
+        )
+
+        assert issubclass(handler_class, TelegramWebhookHandler)
+        assert handler_class.config is mock_config
+        assert handler_class.telegram is mock_telegram
+        assert handler_class.tmux is mock_tmux
+        assert handler_class.state is mock_state
+        assert handler_class.webhook is mock_webhook
+        assert handler_class.commands is mock_commands
+
+    def test_registry_parameter_name(self, mock_config, mock_telegram, mock_tmux,
+                                     mock_state, mock_webhook, mock_commands):
+        """Test that create_handler_class accepts 'registry' parameter."""
+        # This should not raise an error
+        handler_class = create_handler_class(
+            config=mock_config,
+            telegram=mock_telegram,
+            tmux=mock_tmux,
+            state=mock_state,
+            webhook=mock_webhook,
+            registry=mock_commands  # Using 'registry' parameter name
+        )
+
+        # The registry should be stored as 'commands' class attribute
+        assert handler_class.commands is mock_commands
+
+    def test_backward_compatibility_with_factory(self, mock_config, mock_telegram, mock_tmux,
+                                                 mock_state, mock_webhook, mock_commands):
+        """Test that both functions produce equivalent results."""
+        handler_class_1 = create_handler_class(
+            config=mock_config,
+            telegram=mock_telegram,
+            tmux=mock_tmux,
+            state=mock_state,
+            webhook=mock_webhook,
+            registry=mock_commands
+        )
+
+        handler_class_2 = create_handler_factory(
+            config=mock_config,
+            telegram=mock_telegram,
+            tmux=mock_tmux,
+            state=mock_state,
+            webhook=mock_webhook,
+            commands=mock_commands
+        )
+
+        # Both should have same class attributes
+        assert handler_class_1.config is handler_class_2.config
+        assert handler_class_1.telegram is handler_class_2.telegram
+        assert handler_class_1.tmux is handler_class_2.tmux
+        assert handler_class_1.state is handler_class_2.state
+        assert handler_class_1.webhook is handler_class_2.webhook
+        assert handler_class_1.commands is handler_class_2.commands
 
 
 class TestPathValidation:
