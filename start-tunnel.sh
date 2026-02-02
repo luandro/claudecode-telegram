@@ -24,13 +24,13 @@ echo ""
 ensure_tmux_session
 
 # Start containers with tunnel profile
-docker_compose --profile tunnel up -d
+BRIDGE_MODE=tunnel docker_compose --profile tunnel up -d --force-recreate
 
 echo ""
 echo "Services starting... Webhook will auto-configure on startup."
 echo "The bridge service will automatically detect the tunnel URL and register the webhook."
 echo ""
-echo "This process includes automatic retries and may take up to 60 seconds."
+echo "This process includes automatic retries and may take up to 2 minutes."
 
 # Wait for cloudflared to start, be healthy, and extract tunnel URL
 echo "Waiting for tunnel URL..."

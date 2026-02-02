@@ -56,6 +56,7 @@ WORKDIR /app
 
 # Copy project files
 COPY pyproject.toml bridge.py ./
+COPY claudecode_telegram/ /app/claudecode_telegram/
 COPY hooks/ /app/hooks/
 
 # Install the package

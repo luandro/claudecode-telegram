@@ -218,7 +218,10 @@ class WebhookManager:
         # Determine webhook URL based on deployment mode
         webhook_url = self._get_webhook_url_for_mode()
         if not webhook_url:
+            print(f"Aborting auto-setup: Could not determine webhook URL for {self.config.deployment_mode} mode", flush=True)
             return False
+
+        print(f"Target webhook URL: {webhook_url}", flush=True)
 
         # Query actual Telegram webhook status
         current_telegram_webhook = self.get_current_url()
@@ -266,7 +269,7 @@ class WebhookManager:
             Webhook URL string, or None if tunnel not available
         """
         print("Waiting for cloudflared tunnel URL...", flush=True)
-        tunnel_url = self._wait_for_tunnel_url(max_wait_seconds=60, poll_interval=2)
+        tunnel_url = self._wait_for_tunnel_url(max_wait_seconds=120, poll_interval=2)
 
         if not tunnel_url:
             print("Failed to get tunnel URL - webhook not configured", flush=True)
