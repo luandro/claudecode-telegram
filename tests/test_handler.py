@@ -446,7 +446,7 @@ class TestPostEndpoint:
 
 
 class TestCallbackHandling:
-    """Tests for _handle_callback_query method."""
+    """Tests for handle_callback method."""
 
     def test_callback_without_user_id(self, handler_instance, mock_telegram):
         """Test callback query without user ID."""
@@ -456,7 +456,7 @@ class TestCallbackHandling:
             "data": "test"
         }
 
-        handler_instance._handle_callback_query(callback_query)
+        handler_instance.handle_callback(callback_query)
 
         # Should still answer callback
         mock_telegram.answer_callback.assert_called_once_with("callback123")
@@ -469,14 +469,185 @@ class TestCallbackHandling:
             "data": "test"
         }
 
-        handler_instance._handle_callback_query(callback_query)
+        handler_instance.handle_callback(callback_query)
 
         # Should not attempt to answer callback
         mock_telegram.answer_callback.assert_not_called()
 
+    def test_callback_resume_session(self, handler_instance, mock_tmux, mock_telegram):
+        """Test callback for resuming a specific session."""
+        callback_query = {
+            "id": "callback123",
+            "from": {"id": 123456},
+            "message": {"chat": {"id": 789, "type": "group"}},
+            "data": "resume:abc123def456"
+        }
+
+        # Mock tmux exists
+        mock_tmux.exists.return_value = True
+
+        handler_instance.handle_callback(callback_query)
+
+        # Should answer callback
+        mock_telegram.answer_callback.assert_called_once_with("callback123")
+
+        # Should exit and run resume command
+        mock_tmux.exit_and_run.assert_called_once_with(
+            "claude --resume abc123def456 --dangerously-skip-permissions"
+        )
+
+        # Should send confirmation message
+        mock_telegram.send_message.assert_called_once()
+        assert "Resuming" in mock_telegram.send_message.call_args[0][1]
+
+    def test_callback_continue_recent(self, handler_instance, mock_tmux, mock_telegram):
+        """Test callback for continuing most recent session."""
+        callback_query = {
+            "id": "callback123",
+            "from": {"id": 123456},
+            "message": {"chat": {"id": 789, "type": "group"}},
+            "data": "continue_recent"
+        }
+
+        # Mock tmux exists
+        mock_tmux.exists.return_value = True
+
+        handler_instance.handle_callback(callback_query)
+
+        # Should answer callback
+        mock_telegram.answer_callback.assert_called_once_with("callback123")
+
+        # Should exit and run continue command
+        mock_tmux.exit_and_run.assert_called_once_with(
+            "claude --continue --dangerously-skip-permissions"
+        )
+
+        # Should send confirmation message
+        mock_telegram.send_message.assert_called_once()
+        assert "Continuing" in mock_telegram.send_message.call_args[0][1]
+
+    def test_callback_no_tmux_sends_error(self, handler_instance, mock_tmux, mock_telegram):
+        """Test callback sends error when tmux not available."""
+        callback_query = {
+            "id": "callback123",
+            "from": {"id": 123456},
+            "message": {"chat": {"id": 789, "type": "group"}},
+            "data": "continue_recent"
+        }
+
+        # Mock tmux does not exist
+        mock_tmux.exists.return_value = False
+
+        handler_instance.handle_callback(callback_query)
+
+        # Should answer callback
+        mock_telegram.answer_callback.assert_called_once_with("callback123")
+
+        # Should send error message
+        mock_telegram.send_message.assert_called_once_with(789, "tmux session not found")
+
+    def test_callback_tmux_error_sends_message(self, handler_instance, mock_tmux, mock_telegram):
+        """Test that tmux error in callback sends error message."""
+        callback_query = {
+            "id": "callback123",
+            "from": {"id": 123456},
+            "message": {"chat": {"id": 789, "type": "group"}},
+            "data": "resume:abc123"
+        }
+
+        # Mock tmux exists but exit_and_run raises error
+        mock_tmux.exists.return_value = True
+        mock_tmux.exit_and_run.side_effect = RuntimeError("Session exit failed")
+
+        handler_instance.handle_callback(callback_query)
+
+        # Should send error message
+        mock_telegram.send_message.assert_called_once()
+        assert "Error resuming session" in mock_telegram.send_message.call_args[0][1]
+
+    def test_callback_invalid_resume_format(self, handler_instance, mock_telegram):
+        """Test callback with invalid resume format."""
+        callback_query = {
+            "id": "callback123",
+            "from": {"id": 123456},
+            "message": {"chat": {"id": 789, "type": "group"}},
+            "data": "resume:"  # Missing session ID
+        }
+
+        with patch('builtins.print') as mock_print:
+            handler_instance.handle_callback(callback_query)
+
+            # Should log error
+            error_logged = any(
+                "[CALLBACK_ERROR]" in str(call_args)
+                for call_args in mock_print.call_args_list
+            )
+            assert error_logged
+
+    def test_callback_unknown_data(self, handler_instance, mock_telegram):
+        """Test callback with unknown data pattern."""
+        callback_query = {
+            "id": "callback123",
+            "from": {"id": 123456},
+            "message": {"chat": {"id": 789, "type": "group"}},
+            "data": "unknown_action"
+        }
+
+        # Mock tmux exists
+        handler_instance.tmux.exists.return_value = True
+
+        with patch('builtins.print') as mock_print:
+            handler_instance.handle_callback(callback_query)
+
+            # Should log unknown callback
+            unknown_logged = any(
+                "[CALLBACK_UNKNOWN]" in str(call_args)
+                for call_args in mock_print.call_args_list
+            )
+            assert unknown_logged
+
+    def test_callback_unauthorized_user(self, handler_instance, mock_telegram):
+        """Test that unauthorized user callback is silently ignored."""
+        callback_query = {
+            "id": "callback123",
+            "from": {"id": 111111},  # Unauthorized user
+            "message": {"chat": {"id": 789, "type": "group"}},
+            "data": "continue_recent"
+        }
+
+        handler_instance.handle_callback(callback_query)
+
+        # Should answer callback
+        mock_telegram.answer_callback.assert_called_once_with("callback123")
+
+        # Should not send message or interact with tmux
+        assert mock_telegram.send_message.call_count == 0
+
+    def test_callback_without_chat_id(self, handler_instance, mock_telegram):
+        """Test callback without chat ID is handled gracefully."""
+        callback_query = {
+            "id": "callback123",
+            "from": {"id": 123456},
+            "message": {"chat": {}},
+            "data": "continue_recent"
+        }
+
+        with patch('builtins.print') as mock_print:
+            handler_instance.handle_callback(callback_query)
+
+            # Should answer callback
+            mock_telegram.answer_callback.assert_called_once_with("callback123")
+
+            # Should log error
+            error_logged = any(
+                "[CALLBACK_ERROR]" in str(call_args) and "Missing chat_id" in str(call_args)
+                for call_args in mock_print.call_args_list
+            )
+            assert error_logged
+
 
 class TestMessageHandling:
-    """Tests for _handle_message method."""
+    """Tests for handle_message method."""
 
     def test_message_without_text(self, handler_instance):
         """Test message without text is ignored."""
@@ -488,14 +659,14 @@ class TestMessageHandling:
         }
 
         with patch('builtins.print') as mock_print:
-            handler_instance._handle_message(update)
+            handler_instance.handle_message(update)
 
-            # Message is logged but no TODO message should appear (early return)
-            todo_logged = any(
-                "[TODO]" in str(call_args)
+            # Should log MESSAGE but return early (no state or telegram calls)
+            message_logged = any(
+                "[MESSAGE]" in str(call_args)
                 for call_args in mock_print.call_args_list
             )
-            assert not todo_logged
+            assert message_logged
 
     def test_message_without_chat_id(self, handler_instance):
         """Test message without chat ID is ignored."""
@@ -508,4 +679,163 @@ class TestMessageHandling:
         }
 
         # Should not raise exception
-        handler_instance._handle_message(update)
+        handler_instance.handle_message(update)
+
+    def test_message_saves_chat_id(self, handler_instance, mock_state, mock_telegram):
+        """Test that message handling saves chat_id to state."""
+        update = {
+            "message": {
+                "message_id": 1,
+                "from": {"id": 123456},
+                "chat": {"id": 789, "type": "group"},
+                "text": "Hello"
+            }
+        }
+
+        handler_instance.handle_message(update)
+
+        # Should save chat_id to state
+        mock_state.set_chat_id.assert_called_once_with(789)
+
+    def test_message_sets_reaction(self, handler_instance, mock_telegram):
+        """Test that message handling sets reaction emoji."""
+        update = {
+            "message": {
+                "message_id": 1,
+                "from": {"id": 123456},
+                "chat": {"id": 789, "type": "group"},
+                "text": "Hello"
+            }
+        }
+
+        handler_instance.handle_message(update)
+
+        # Should set reaction
+        mock_telegram.set_reaction.assert_called_once_with(789, 1, "👀")
+
+    def test_command_message_dispatches_to_registry(self, handler_instance, mock_commands, mock_telegram):
+        """Test that command message is dispatched to command registry."""
+        update = {
+            "message": {
+                "message_id": 1,
+                "from": {"id": 123456},
+                "chat": {"id": 789, "type": "group"},
+                "text": "/start"
+            }
+        }
+
+        # Mock command execution to return a reply
+        mock_commands.execute.return_value = "Welcome!"
+
+        handler_instance.handle_message(update)
+
+        # Should execute command through registry
+        mock_commands.execute.assert_called_once()
+        call_args = mock_commands.execute.call_args
+        assert call_args[0][0] == "/start"  # Command name
+        assert call_args[0][1].chat_id == 789  # CommandContext
+
+        # Should send reply
+        mock_telegram.send_message.assert_called_once_with(789, "Welcome!")
+
+    def test_command_blocked_sends_error(self, handler_instance, mock_commands, mock_telegram):
+        """Test that blocked command sends error message."""
+        update = {
+            "message": {
+                "message_id": 1,
+                "from": {"id": 123456},
+                "chat": {"id": 789, "type": "group"},
+                "text": "/mcp"
+            }
+        }
+
+        # Mock command execution to raise ValueError
+        mock_commands.execute.side_effect = ValueError("Command '/mcp' is blocked (interactive only)")
+
+        handler_instance.handle_message(update)
+
+        # Should send error message
+        mock_telegram.send_message.assert_called_once()
+        assert "Error:" in mock_telegram.send_message.call_args[0][1]
+        assert "blocked" in mock_telegram.send_message.call_args[0][1]
+
+    def test_non_command_sends_to_tmux(self, handler_instance, mock_tmux, mock_state):
+        """Test that non-command message is sent to tmux."""
+        update = {
+            "message": {
+                "message_id": 1,
+                "from": {"id": 123456},
+                "chat": {"id": 789, "type": "group"},
+                "text": "Hello Claude"
+            }
+        }
+
+        # Mock tmux exists
+        mock_tmux.exists.return_value = True
+
+        handler_instance.handle_message(update)
+
+        # Should set pending flag
+        mock_state.set_pending.assert_called_once()
+
+        # Should send to tmux
+        mock_tmux.send_text.assert_called_once_with("Hello Claude", press_enter=True)
+
+    def test_non_command_no_tmux_sends_error(self, handler_instance, mock_tmux, mock_telegram):
+        """Test that non-command message sends error when tmux not available."""
+        update = {
+            "message": {
+                "message_id": 1,
+                "from": {"id": 123456},
+                "chat": {"id": 789, "type": "group"},
+                "text": "Hello Claude"
+            }
+        }
+
+        # Mock tmux does not exist
+        mock_tmux.exists.return_value = False
+
+        handler_instance.handle_message(update)
+
+        # Should send error message
+        mock_telegram.send_message.assert_called_once_with(789, "tmux session not found")
+
+    def test_non_command_tmux_error_sends_message(self, handler_instance, mock_tmux, mock_telegram):
+        """Test that tmux error sends error message to user."""
+        update = {
+            "message": {
+                "message_id": 1,
+                "from": {"id": 123456},
+                "chat": {"id": 789, "type": "group"},
+                "text": "Hello Claude"
+            }
+        }
+
+        # Mock tmux exists but send_text raises error
+        mock_tmux.exists.return_value = True
+        mock_tmux.send_text.side_effect = RuntimeError("Connection failed")
+
+        handler_instance.handle_message(update)
+
+        # Should send error message
+        mock_telegram.send_message.assert_called_once()
+        assert "Error sending to Claude" in mock_telegram.send_message.call_args[0][1]
+
+    def test_unauthorized_user_message(self, handler_instance, mock_state, mock_telegram):
+        """Test that unauthorized user message is silently ignored."""
+        update = {
+            "message": {
+                "message_id": 1,
+                "from": {"id": 111111},  # Unauthorized user
+                "chat": {"id": 789, "type": "group"},
+                "text": "Hello"
+            }
+        }
+
+        handler_instance.handle_message(update)
+
+        # Should not save chat_id
+        mock_state.set_chat_id.assert_not_called()
+
+        # Should not set reaction
+        mock_telegram.set_reaction.assert_not_called()

@@ -201,19 +201,22 @@ class TelegramWebhookHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b"OK")
 
-    def _handle_callback_query(self, callback_query: dict) -> None:
+    def handle_callback(self, callback: dict) -> None:
         """Handle callback query from inline keyboard button press.
 
+        Extracts callback data, validates user authorization, answers the callback,
+        and handles resume: and continue_recent patterns.
+
         Args:
-            callback_query: The callback_query object from Telegram update
+            callback: The callback_query object from Telegram update
         """
         # Extract callback data
-        chat = callback_query.get("message", {}).get("chat", {})
+        chat = callback.get("message", {}).get("chat", {})
         chat_id = chat.get("id")
         chat_type = chat.get("type")
-        user_id = callback_query.get("from", {}).get("id")
-        data = callback_query.get("data", "")
-        callback_id = callback_query.get("id")
+        user_id = callback.get("from", {}).get("id")
+        data = callback.get("data", "")
+        callback_id = callback.get("id")
 
         print(f"[CALLBACK] from={user_id} chat={chat_id} data={data}", flush=True)
 
@@ -227,12 +230,65 @@ class TelegramWebhookHandler(BaseHTTPRequestHandler):
             print(f"[AUTH_FAIL] User {user_id} not allowed in {chat_type}", flush=True)
             return
 
-        # Callback handling is delegated to command handlers
-        # This is a placeholder for future callback handling logic
-        print(f"[TODO] Callback handling not yet implemented: {data}")
+        # Validate chat_id for operations
+        if not chat_id:
+            print("[CALLBACK_ERROR] Missing chat_id", flush=True)
+            return
 
-    def _handle_message(self, update: dict) -> None:
+        # Check if tmux session exists
+        if not self.tmux.exists():
+            self.telegram.send_message(chat_id, "tmux session not found")
+            return
+
+        # Handle resume: pattern (resume specific session)
+        if data.startswith("resume:"):
+            session_id = data.split(":", 1)[1] if ":" in data else ""
+            if not session_id:
+                print("[CALLBACK_ERROR] Invalid resume data format", flush=True)
+                return
+
+            try:
+                self.tmux.exit_and_run(
+                    f"claude --resume {session_id} --dangerously-skip-permissions"
+                )
+                self.telegram.send_message(chat_id, f"Resuming: {session_id[:8]}...")
+                print(f"[CALLBACK_SUCCESS] Resumed session {session_id}", flush=True)
+            except RuntimeError as e:
+                print(f"[CALLBACK_ERROR] Failed to resume session: {e}", flush=True)
+                self.telegram.send_message(chat_id, f"Error resuming session: {e}")
+            return
+
+        # Handle continue_recent pattern (continue most recent session)
+        if data == "continue_recent":
+            try:
+                self.tmux.exit_and_run(
+                    "claude --continue --dangerously-skip-permissions"
+                )
+                self.telegram.send_message(chat_id, "Continuing most recent...")
+                print("[CALLBACK_SUCCESS] Continued most recent session", flush=True)
+            except RuntimeError as e:
+                print(f"[CALLBACK_ERROR] Failed to continue session: {e}", flush=True)
+                self.telegram.send_message(chat_id, f"Error continuing session: {e}")
+            return
+
+        # Unknown callback data
+        print(f"[CALLBACK_UNKNOWN] Unhandled callback data: {data}", flush=True)
+
+    def _handle_callback_query(self, callback_query: dict) -> None:
+        """Internal wrapper for handle_callback to maintain backward compatibility.
+
+        Args:
+            callback_query: The callback_query object from Telegram update
+        """
+        self.handle_callback(callback_query)
+
+    def handle_message(self, update: dict) -> None:
         """Handle incoming text message from Telegram.
+
+        Extracts chat_id, user_id, text, message_id; validates user;
+        saves chat_id to state; checks if command (starts with /),
+        dispatches to registry or sends to tmux; sets reaction;
+        starts typing loop.
 
         Args:
             update: The full update object containing the message
@@ -241,7 +297,7 @@ class TelegramWebhookHandler(BaseHTTPRequestHandler):
         chat = msg.get("chat", {})
         text = msg.get("text", "")
         chat_id = chat.get("id")
-        msg_id = msg.get("message_id")
+        message_id = msg.get("message_id")
         chat_type = chat.get("type")
         user_id = msg.get("from", {}).get("id")
 
@@ -257,9 +313,103 @@ class TelegramWebhookHandler(BaseHTTPRequestHandler):
             print(f"[AUTH_FAIL] User {user_id} not allowed in {chat_type}", flush=True)
             return
 
-        # Message handling is delegated to command handlers
-        # This is a placeholder for future message handling logic
-        print(f"[TODO] Message handling not yet implemented: {text[:50]}")
+        # Save chat_id to state for future replies
+        self.state.set_chat_id(chat_id)
+
+        # Set reaction to acknowledge message receipt
+        if message_id:
+            self.telegram.set_reaction(chat_id, message_id, "👀")
+
+        # Check if message is a command (starts with /)
+        if text.startswith("/"):
+            self._handle_command(chat_id, message_id, user_id, text)
+        else:
+            self._handle_non_command(chat_id, message_id, text)
+
+    def _handle_command(self, chat_id: int, message_id: int | None, user_id: int | None, text: str) -> None:
+        """Handle command message by dispatching to command registry.
+
+        Args:
+            chat_id: Chat ID where message was sent
+            message_id: Message ID for reactions
+            user_id: User ID who sent the message
+            text: Full message text
+        """
+        # Parse command name (first word after /)
+        command_name = text.split()[0] if text else ""
+
+        try:
+            # Build command context
+            from .commands.base import CommandContext
+            ctx = CommandContext(
+                chat_id=chat_id,
+                message_id=message_id,
+                user_id=user_id,
+                text=text,
+                tmux=self.tmux,
+                telegram=self.telegram,
+                state=self.state,
+                config=self.config
+            )
+
+            # Execute command through registry
+            reply = self.commands.execute(command_name, ctx)
+
+            # Send reply if command returned one
+            if reply:
+                self.telegram.send_message(chat_id, reply)
+
+            print(f"[COMMAND] Executed {command_name}", flush=True)
+
+        except ValueError as e:
+            # Command is blocked or not found
+            error_msg = str(e)
+            print(f"[COMMAND_ERROR] {error_msg}", flush=True)
+            self.telegram.send_message(chat_id, f"Error: {error_msg}")
+        except Exception as e:
+            # Unexpected error during command execution
+            print(f"[COMMAND_ERROR] Unexpected error executing {command_name}: {e}", flush=True)
+            self.telegram.send_message(chat_id, f"Error executing command: {e}")
+
+    def _handle_non_command(self, chat_id: int, message_id: int | None, text: str) -> None:
+        """Handle non-command message by sending to tmux and starting typing loop.
+
+        Args:
+            chat_id: Chat ID where message was sent
+            message_id: Message ID for reactions
+            text: Message text to send to Claude
+        """
+        # Check if tmux session exists
+        if not self.tmux.exists():
+            self.telegram.send_message(chat_id, "tmux session not found")
+            return
+
+        # Set pending flag to indicate message originated from Telegram
+        self.state.set_pending()
+
+        # Start typing indicator loop in background
+        from .telegram import TypingIndicator
+        typing = TypingIndicator(self.telegram, chat_id)
+        typing.__enter__()
+
+        try:
+            # Send message to tmux (Claude Code)
+            self.tmux.send_text(text, press_enter=True)
+            print(f"[TMUX] Sent message to Claude: {text[:50]}{'...' if len(text) > 50 else ''}", flush=True)
+        except RuntimeError as e:
+            print(f"[TMUX_ERROR] Failed to send message: {e}", flush=True)
+            self.telegram.send_message(chat_id, f"Error sending to Claude: {e}")
+        finally:
+            # Stop typing indicator
+            typing.__exit__(None, None, None)
+
+    def _handle_message(self, update: dict) -> None:
+        """Internal wrapper for handle_message to maintain backward compatibility.
+
+        Args:
+            update: The full update object containing the message
+        """
+        self.handle_message(update)
 
 
 def create_handler_factory(
