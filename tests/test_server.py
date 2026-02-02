@@ -184,7 +184,7 @@ class TestCreateServer:
         mock_state_manager.assert_called_once_with(valid_config.claude_dir)
         mock_tmux_controller.assert_called_once_with(
             session=valid_config.tmux_session,
-            socket_path=None
+            socket_path=""
         )
         mock_webhook_manager.assert_called_once_with(mock_telegram, mock_state, valid_config)
 

@@ -95,7 +95,7 @@ def create_server(
     state = StateManager(config.claude_dir)
     tmux = TmuxController(
         session=config.tmux_session,
-        socket_path=config.tmux_socket_path or None
+        socket_path=config.tmux_socket_path or ""
     )
 
     # Initialize webhook manager

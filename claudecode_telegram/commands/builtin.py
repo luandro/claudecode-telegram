@@ -11,7 +11,7 @@ Implements all the core commands for controlling Claude Code via Telegram:
 """
 
 import time
-from typing import Optional
+from typing import Any, Optional
 
 from claudecode_telegram.commands.base import Command, CommandContext
 from claudecode_telegram.commands.registry import CommandRegistry
@@ -21,7 +21,7 @@ from claudecode_telegram.commands.registry import CommandRegistry
 _builtin_registry: Optional[CommandRegistry] = None
 
 
-def register(command_class: type[Command]) -> type[Command]:
+def register(command_class: Any) -> Any:
     """Decorator for registering builtin commands.
 
     This is a module-level decorator that uses a global registry instance.

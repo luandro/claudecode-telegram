@@ -5,7 +5,7 @@ Maintains the registry of available commands and provides dispatch
 logic for routing incoming Telegram commands to their handlers.
 """
 
-from typing import Callable
+from typing import Any, Callable
 
 from claudecode_telegram.commands.base import Command, CommandContext
 
@@ -28,7 +28,7 @@ class CommandRegistry:
         self._commands: dict[str, Command] = {}
         self._blocked_commands: set[str] = set(blocked_commands or [])
 
-    def register(self, command_class: type[Command]) -> None:
+    def register(self, command_class: Any) -> None:
         """Register a command class.
 
         Args:
