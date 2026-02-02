@@ -6,9 +6,87 @@ and runtime configuration for the Telegram bridge server.
 """
 
 import os
+import re
 import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
+
+
+class ConfigError(Exception):
+    """Configuration validation error."""
+    pass
+
+
+def _parse_allowed_user_ids(raw: str) -> set[int]:
+    """Parse comma-separated user IDs into a set of integers.
+
+    Args:
+        raw: Comma-separated user ID string (e.g., "123,456,789")
+
+    Returns:
+        Set of parsed user IDs, empty set on parse error
+    """
+    if not raw.strip():
+        return set()
+
+    try:
+        return set(
+            int(uid.strip())
+            for uid in raw.split(",")
+            if uid.strip()
+        )
+    except ValueError:
+        print(f"Warning: Invalid user IDs format: {raw}")
+        return set()
+
+
+def _parse_reaction_emoji(raw: str) -> str | None:
+    """Parse and validate reaction emoji configuration.
+
+    Args:
+        raw: Raw emoji string from environment variable
+
+    Returns:
+        Validated emoji string, None if disabled or invalid
+    """
+    raw = raw.strip()
+
+    if not raw:
+        return "\U0001f44d"  # Default: 👍
+
+    if raw.lower() in ("none", "false", "0"):
+        return None
+
+    # Basic validation: emoji should be reasonable length (1-10 chars)
+    if len(raw) <= 10:
+        return raw
+
+    return None
+
+
+def _generate_webhook_path() -> str:
+    """Generate a secure random webhook path.
+
+    Returns:
+        64-character hexadecimal string
+    """
+    return secrets.token_hex(32)
+
+
+def _is_valid_domain(domain: str) -> bool:
+    """Basic domain name validation.
+
+    Args:
+        domain: Domain name to validate (e.g., 'example.com', 'sub.example.com')
+
+    Returns:
+        True if domain format is valid, False otherwise
+    """
+    if not domain or len(domain) > 253:
+        return False
+    # Basic pattern: alphanumeric + hyphens + dots, proper TLD
+    pattern = r'^([a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$'
+    return bool(re.match(pattern, domain.lower()))
 
 
 @dataclass
@@ -61,14 +139,7 @@ class BridgeConfig:
         telegram_webhook_secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
 
         # Reaction emoji with validation
-        reaction_emoji_raw = os.environ.get("TELEGRAM_REACTION_EMOJI", "").strip()
-        if not reaction_emoji_raw:
-            reaction_emoji = "\U0001f44d"  # Default: 👍
-        elif reaction_emoji_raw.lower() in ("none", "false", "0"):
-            reaction_emoji = None
-        else:
-            # Basic validation: emoji should be reasonable length (1-10 chars)
-            reaction_emoji = reaction_emoji_raw if len(reaction_emoji_raw) <= 10 else None
+        reaction_emoji = _parse_reaction_emoji(os.environ.get("TELEGRAM_REACTION_EMOJI", ""))
 
         # Server configuration
         port = int(os.environ.get("PORT", "8080"))
@@ -77,7 +148,7 @@ class BridgeConfig:
         # Generate webhook path if not provided
         webhook_path = os.environ.get("WEBHOOK_PATH", "").strip()
         if not webhook_path:
-            webhook_path = secrets.token_hex(32)
+            webhook_path = _generate_webhook_path()
 
         # Deployment configuration
         deployment_mode = os.environ.get("DEPLOYMENT_MODE", "").lower().strip()
@@ -92,17 +163,9 @@ class BridgeConfig:
             webhook_startup_delay = 5
 
         # Access control - parse allowed user IDs
-        allowed_user_ids = set()
-        allowed_ids_raw = os.environ.get("ALLOWED_TELEGRAM_USER_IDS", "").strip()
-        if allowed_ids_raw:
-            try:
-                allowed_user_ids = set(
-                    int(uid.strip())
-                    for uid in allowed_ids_raw.split(",")
-                    if uid.strip()
-                )
-            except ValueError:
-                print(f"Warning: Invalid ALLOWED_TELEGRAM_USER_IDS format: {allowed_ids_raw}")
+        allowed_user_ids = _parse_allowed_user_ids(
+            os.environ.get("ALLOWED_TELEGRAM_USER_IDS", "")
+        )
 
         # Parse DM allowed user ID
         dm_allowed_user_id = 0
@@ -154,9 +217,12 @@ class BridgeConfig:
             elif self.deployment_mode not in ("tunnel", "production"):
                 errors.append(f"DEPLOYMENT_MODE must be 'tunnel' or 'production', got '{self.deployment_mode}'")
 
-            # Production mode requires domain
-            if self.deployment_mode == "production" and not self.webhook_domain:
-                errors.append("WEBHOOK_DOMAIN is required when DEPLOYMENT_MODE is 'production'")
+            # Production mode requires valid domain
+            if self.deployment_mode == "production":
+                if not self.webhook_domain:
+                    errors.append("WEBHOOK_DOMAIN is required when DEPLOYMENT_MODE is 'production'")
+                elif not _is_valid_domain(self.webhook_domain):
+                    errors.append(f"WEBHOOK_DOMAIN has invalid format: '{self.webhook_domain}'")
 
         # Startup delay validation
         if self.webhook_startup_delay < 0:

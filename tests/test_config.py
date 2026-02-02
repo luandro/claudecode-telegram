@@ -7,7 +7,14 @@ Tests environment variable parsing, validation, and default values for BridgeCon
 import os
 import pytest
 from pathlib import Path
-from claudecode_telegram.config import BridgeConfig
+from claudecode_telegram.config import (
+    BridgeConfig,
+    ConfigError,
+    _parse_allowed_user_ids,
+    _parse_reaction_emoji,
+    _generate_webhook_path,
+    _is_valid_domain,
+)
 
 
 @pytest.fixture
@@ -238,7 +245,7 @@ class TestBridgeConfigAccessControl:
         # Should return empty set on error and print warning
         assert config.allowed_user_ids == set()
         captured = capsys.readouterr()
-        assert "Warning: Invalid ALLOWED_TELEGRAM_USER_IDS format" in captured.out
+        assert "Warning: Invalid user IDs format" in captured.out
 
     def test_parse_dm_allowed_user_id(self, minimal_valid_env):
         minimal_valid_env.setenv("DM_ALLOWED_USER_ID", "987654321")
@@ -309,6 +316,20 @@ class TestBridgeConfigValidation:
         config = BridgeConfig.from_env()
         errors = config.validate()
         assert errors == []
+
+    def test_validate_production_with_invalid_domain(self, minimal_valid_env):
+        minimal_valid_env.setenv("DEPLOYMENT_MODE", "production")
+        minimal_valid_env.setenv("WEBHOOK_DOMAIN", "invalid_domain")
+        config = BridgeConfig.from_env()
+        errors = config.validate()
+        assert any("WEBHOOK_DOMAIN has invalid format" in e for e in errors)
+
+    def test_validate_production_with_ip_address(self, minimal_valid_env):
+        minimal_valid_env.setenv("DEPLOYMENT_MODE", "production")
+        minimal_valid_env.setenv("WEBHOOK_DOMAIN", "192.168.1.1")
+        config = BridgeConfig.from_env()
+        errors = config.validate()
+        assert any("WEBHOOK_DOMAIN has invalid format" in e for e in errors)
 
     def test_validate_negative_startup_delay(self, minimal_valid_env):
         minimal_valid_env.setenv("WEBHOOK_STARTUP_DELAY", "-5")
@@ -403,3 +424,158 @@ class TestBridgeConfigComplexScenarios:
         assert config.webhook_startup_delay == 10
         assert config.tmux_session == "my-claude"
         assert config.claude_dir == Path("/custom/.claude")
+
+
+class TestHelperFunctions:
+    """Test helper validation functions."""
+
+    def test_parse_allowed_user_ids_single(self):
+        result = _parse_allowed_user_ids("123456789")
+        assert result == {123456789}
+
+    def test_parse_allowed_user_ids_multiple(self):
+        result = _parse_allowed_user_ids("123,456,789")
+        assert result == {123, 456, 789}
+
+    def test_parse_allowed_user_ids_with_spaces(self):
+        result = _parse_allowed_user_ids("123, 456 , 789")
+        assert result == {123, 456, 789}
+
+    def test_parse_allowed_user_ids_empty(self):
+        result = _parse_allowed_user_ids("")
+        assert result == set()
+
+    def test_parse_allowed_user_ids_whitespace_only(self):
+        result = _parse_allowed_user_ids("   ")
+        assert result == set()
+
+    def test_parse_allowed_user_ids_invalid_format(self, capsys):
+        result = _parse_allowed_user_ids("123,abc,456")
+        assert result == set()
+        captured = capsys.readouterr()
+        assert "Warning: Invalid user IDs format" in captured.out
+
+    def test_parse_allowed_user_ids_with_empty_values(self):
+        result = _parse_allowed_user_ids("123,,456")
+        assert result == {123, 456}
+
+    def test_parse_reaction_emoji_default_empty(self):
+        result = _parse_reaction_emoji("")
+        assert result == "\U0001f44d"  # 👍
+
+    def test_parse_reaction_emoji_custom(self):
+        result = _parse_reaction_emoji("🎉")
+        assert result == "🎉"
+
+    def test_parse_reaction_emoji_disable_none(self):
+        result = _parse_reaction_emoji("none")
+        assert result is None
+
+    def test_parse_reaction_emoji_disable_false(self):
+        result = _parse_reaction_emoji("false")
+        assert result is None
+
+    def test_parse_reaction_emoji_disable_zero(self):
+        result = _parse_reaction_emoji("0")
+        assert result is None
+
+    def test_parse_reaction_emoji_case_insensitive_disable(self):
+        assert _parse_reaction_emoji("NONE") is None
+        assert _parse_reaction_emoji("False") is None
+        assert _parse_reaction_emoji("FALSE") is None
+
+    def test_parse_reaction_emoji_too_long(self):
+        result = _parse_reaction_emoji("x" * 11)
+        assert result is None
+
+    def test_parse_reaction_emoji_max_length(self):
+        result = _parse_reaction_emoji("x" * 10)
+        assert result == "x" * 10
+
+    def test_parse_reaction_emoji_with_whitespace(self):
+        result = _parse_reaction_emoji("  🎉  ")
+        assert result == "🎉"
+
+    def test_generate_webhook_path_format(self):
+        path = _generate_webhook_path()
+        assert len(path) == 64
+        assert all(c in "0123456789abcdef" for c in path)
+
+    def test_generate_webhook_path_unique(self):
+        path1 = _generate_webhook_path()
+        path2 = _generate_webhook_path()
+        assert path1 != path2
+
+    def test_is_valid_domain_simple(self):
+        assert _is_valid_domain("example.com") is True
+
+    def test_is_valid_domain_subdomain(self):
+        assert _is_valid_domain("sub.example.com") is True
+
+    def test_is_valid_domain_deep_subdomain(self):
+        assert _is_valid_domain("deep.sub.example.com") is True
+
+    def test_is_valid_domain_with_hyphen(self):
+        assert _is_valid_domain("my-site.example.com") is True
+
+    def test_is_valid_domain_empty(self):
+        assert _is_valid_domain("") is False
+
+    def test_is_valid_domain_no_tld(self):
+        assert _is_valid_domain("example") is False
+
+    def test_is_valid_domain_trailing_dot(self):
+        assert _is_valid_domain("example.com.") is False
+
+    def test_is_valid_domain_leading_dot(self):
+        assert _is_valid_domain(".example.com") is False
+
+    def test_is_valid_domain_double_dot(self):
+        assert _is_valid_domain("example..com") is False
+
+    def test_is_valid_domain_leading_hyphen(self):
+        assert _is_valid_domain("-example.com") is False
+
+    def test_is_valid_domain_trailing_hyphen(self):
+        assert _is_valid_domain("example-.com") is False
+
+    def test_is_valid_domain_too_long(self):
+        # Domain longer than 253 chars
+        long_domain = "a" * 250 + ".com"
+        assert _is_valid_domain(long_domain) is False
+
+    def test_is_valid_domain_with_numbers(self):
+        assert _is_valid_domain("123.example.com") is True
+        assert _is_valid_domain("example123.com") is True
+
+    def test_is_valid_domain_case_insensitive(self):
+        assert _is_valid_domain("Example.COM") is True
+        assert _is_valid_domain("EXAMPLE.COM") is True
+
+    def test_is_valid_domain_underscore(self):
+        # Underscores not allowed in domain names
+        assert _is_valid_domain("my_site.example.com") is False
+
+    def test_is_valid_domain_special_chars(self):
+        assert _is_valid_domain("ex@mple.com") is False
+        assert _is_valid_domain("ex#mple.com") is False
+
+    def test_is_valid_domain_localhost(self):
+        # localhost is not a valid domain (no TLD)
+        assert _is_valid_domain("localhost") is False
+
+    def test_is_valid_domain_ip_address(self):
+        # IP addresses are not domain names
+        assert _is_valid_domain("192.168.1.1") is False
+
+
+class TestConfigErrorException:
+    """Test ConfigError exception class."""
+
+    def test_config_error_instantiation(self):
+        error = ConfigError("Test error message")
+        assert str(error) == "Test error message"
+
+    def test_config_error_inheritance(self):
+        error = ConfigError("Test")
+        assert isinstance(error, Exception)
