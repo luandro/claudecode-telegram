@@ -1,12 +1,14 @@
 """Tests for TelegramClient class."""
 
 import json
+import time
 import urllib.error
+from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
 import pytest
 
-from claudecode_telegram.telegram import TelegramClient
+from claudecode_telegram.telegram import TelegramClient, TypingIndicator
 
 
 class TestTelegramClientInit:
@@ -450,3 +452,156 @@ class TestSetCommands:
         result = client.set_commands([])
 
         assert result is False
+
+
+class TestStartTypingLoop:
+    """Test start_typing_loop method."""
+
+    @patch.object(TelegramClient, 'send_typing')
+    def test_start_typing_loop_runs_until_flag_exists(self, mock_send_typing, tmp_path):
+        """Test typing loop runs until stop flag file exists."""
+        stop_flag = tmp_path / "stop_flag"
+        mock_send_typing.return_value = True
+
+        client = TelegramClient("test_token")
+        thread = client.start_typing_loop(12345, stop_flag)
+
+        # Let it run for a bit
+        time.sleep(0.1)
+
+        # Verify typing was sent at least once
+        assert mock_send_typing.call_count >= 1
+        assert mock_send_typing.call_args[0] == (12345,)
+
+        # Create stop flag and wait for thread to finish
+        stop_flag.touch()
+        thread.join(timeout=5.0)
+        assert not thread.is_alive()
+
+    @patch.object(TelegramClient, 'send_typing')
+    def test_start_typing_loop_stops_immediately_if_flag_exists(self, mock_send_typing, tmp_path):
+        """Test typing loop stops immediately if flag already exists."""
+        stop_flag = tmp_path / "stop_flag"
+        stop_flag.touch()  # Create flag before starting
+        mock_send_typing.return_value = True
+
+        client = TelegramClient("test_token")
+        thread = client.start_typing_loop(12345, stop_flag)
+
+        # Wait briefly and verify thread completes
+        thread.join(timeout=1.0)
+        assert not thread.is_alive()
+
+    @patch.object(TelegramClient, 'send_typing')
+    def test_start_typing_loop_is_daemon_thread(self, mock_send_typing, tmp_path):
+        """Test typing loop thread is daemon so it won't block program exit."""
+        stop_flag = tmp_path / "stop_flag"
+        mock_send_typing.return_value = True
+
+        client = TelegramClient("test_token")
+        thread = client.start_typing_loop(12345, stop_flag)
+
+        assert thread.daemon is True
+
+        # Cleanup
+        stop_flag.touch()
+        thread.join(timeout=1.0)
+
+
+class TestTypingIndicator:
+    """Test TypingIndicator context manager."""
+
+    @patch.object(TelegramClient, 'send_typing')
+    def test_typing_indicator_starts_and_stops(self, mock_send_typing):
+        """Test typing indicator starts on enter and stops on exit."""
+        mock_send_typing.return_value = True
+        client = TelegramClient("test_token")
+
+        with TypingIndicator(client, 12345):
+            # Should be sending typing indicators
+            time.sleep(0.1)
+            assert mock_send_typing.call_count >= 1
+
+        # After context exit, thread should stop
+        time.sleep(0.2)
+        call_count_after_exit = mock_send_typing.call_count
+        time.sleep(0.5)
+
+        # Should not increase (or increase by at most 1 if timing is unlucky)
+        assert mock_send_typing.call_count <= call_count_after_exit + 1
+
+    @patch.object(TelegramClient, 'send_typing')
+    def test_typing_indicator_with_custom_interval(self, mock_send_typing):
+        """Test typing indicator with custom interval."""
+        mock_send_typing.return_value = True
+        client = TelegramClient("test_token")
+
+        with TypingIndicator(client, 12345, interval=0.1):
+            time.sleep(0.35)
+            # With 0.1s interval, should have ~3 calls in 0.35s
+            assert mock_send_typing.call_count >= 2
+
+    @patch.object(TelegramClient, 'send_typing')
+    def test_typing_indicator_sends_to_correct_chat(self, mock_send_typing):
+        """Test typing indicator sends to correct chat ID."""
+        mock_send_typing.return_value = True
+        client = TelegramClient("test_token")
+
+        with TypingIndicator(client, 67890):
+            time.sleep(0.1)
+
+        # Verify all calls were to the correct chat ID
+        for call_args in mock_send_typing.call_args_list:
+            assert call_args[0][0] == 67890
+
+    @patch.object(TelegramClient, 'send_typing')
+    def test_typing_indicator_exception_handling(self, mock_send_typing):
+        """Test typing indicator stops even when exception occurs."""
+        mock_send_typing.return_value = True
+        client = TelegramClient("test_token")
+
+        try:
+            with TypingIndicator(client, 12345):
+                time.sleep(0.1)
+                raise ValueError("Test exception")
+        except ValueError:
+            pass
+
+        # Thread should still stop cleanly
+        time.sleep(0.2)
+        call_count_after_exit = mock_send_typing.call_count
+        time.sleep(0.5)
+
+        # Should not increase (or increase by at most 1)
+        assert mock_send_typing.call_count <= call_count_after_exit + 1
+
+    @patch.object(TelegramClient, 'send_typing')
+    def test_typing_indicator_thread_cleanup(self, mock_send_typing):
+        """Test typing indicator thread is properly cleaned up."""
+        mock_send_typing.return_value = True
+        client = TelegramClient("test_token")
+
+        indicator = TypingIndicator(client, 12345)
+        indicator.__enter__()
+
+        # Verify thread is running
+        assert indicator._thread is not None
+        assert indicator._thread.is_alive()
+
+        indicator.__exit__(None, None, None)
+
+        # Verify thread stops within timeout
+        time.sleep(0.2)
+        assert not indicator._thread.is_alive()
+
+    @patch.object(TelegramClient, 'send_typing')
+    def test_typing_indicator_quick_exit(self, mock_send_typing):
+        """Test typing indicator handles quick context exit."""
+        mock_send_typing.return_value = True
+        client = TelegramClient("test_token")
+
+        with TypingIndicator(client, 12345):
+            pass  # Exit immediately
+
+        # Should handle quick exit without errors
+        time.sleep(0.1)

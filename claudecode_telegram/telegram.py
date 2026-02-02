@@ -1,7 +1,10 @@
 """Telegram Bot API client with centralized error handling and logging."""
 
 import json
+import threading
+import time
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 
@@ -256,3 +259,65 @@ class TelegramClient:
             return True
 
         return False
+
+    def start_typing_loop(self, chat_id: int, stop_flag: Path) -> threading.Thread:
+        """Start a background thread that sends typing indicators until stop flag exists.
+
+        Args:
+            chat_id: Target chat ID
+            stop_flag: Path to file that signals thread to stop when it exists
+
+        Returns:
+            Thread object (already started)
+        """
+        def _typing_loop():
+            while not stop_flag.exists():
+                self.send_typing(chat_id)
+                time.sleep(4.0)
+
+        thread = threading.Thread(target=_typing_loop, daemon=True)
+        thread.start()
+        return thread
+
+
+class TypingIndicator:
+    """Context manager that sends typing indicators in a background thread.
+
+    Example:
+        with TypingIndicator(client, chat_id):
+            # Long-running operation
+            process_message()
+        # Typing indicator stops automatically
+    """
+
+    def __init__(self, client: TelegramClient, chat_id: int, interval: float = 4.0):
+        """Initialize the typing indicator.
+
+        Args:
+            client: TelegramClient instance
+            chat_id: Target chat ID
+            interval: Seconds between typing indicator sends (default: 4.0)
+        """
+        self.client = client
+        self.chat_id = chat_id
+        self.interval = interval
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def __enter__(self):
+        """Start the typing indicator thread."""
+        def _typing_loop():
+            while not self._stop_event.is_set():
+                self.client.send_typing(self.chat_id)
+                # Use wait instead of sleep so we can exit quickly
+                self._stop_event.wait(self.interval)
+
+        self._thread = threading.Thread(target=_typing_loop, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Stop the typing indicator thread."""
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join(timeout=1.0)
